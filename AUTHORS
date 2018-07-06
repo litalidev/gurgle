@@ -1,0 +1,14 @@
+Authors of GURGLE - GNU REPORT GENERATOR LANGUAGE are:
+
+Tim Colles <timc@inf.ed.ac.uk>
+
+Contributions:
+
+Stuart Whitman <swhitman@s3i.com>
+  MySQL driver plus some bug fixes
+
+Anthony Symons <a.symons@citr.com.au>
+  PostgreSQL driver plus some bug fixes
+
+Ken Dawson <ktd@inf.ed.ac.uk>
+  Improved support for building with the CA-Ingres driver

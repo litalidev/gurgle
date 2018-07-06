@@ -1,0 +1,84 @@
+THINGS TO DO IN NO PARTICULAR ORDER
+-----------------------------------
+
+Have a %%COMMENT macro to define a block of text that is ignored as comment
+- like doing %%BLOCK COMMENT for example.
+
+Add support to return Ingres errors (as for GNU SQL).
+
+Pre-processing does block expands - allow multiline defines?
+- do defines get expanded within quotes, plus on arg lines?
+
+Add formal syntax definition for definition file and equate language.
+
+Add operator precedence table.
+
+Continue to convert static structures to dynamic.
+
+A method for handling variable length records that avoids page breaking
+mid record. This would require buffering each record, and testing its line
+count before outputting, so as if it makes the line count exceed the line
+count per page a page break can be added before the record is output.
+
+A method for counting lines under LaTeX output. This is tricky, although
+a generalised version of the lestimate() function might be useable.
+
+Some additional preprocessor macros such as {\em \%\%TEXIFDEF} and
+{\em \%\%TEXENDIF} for conditional processing. The argument could be a user
+macro definition or an equate.
+
+Extend the application of system variables to allow them to define the
+limits of system resources. They can then be used to increase these resources
+if neccessary. This would require a considerable restructuring of the way
+system resources are managed --- from static structures to dynamic ones.
+Or have completely automatic rescaling structures which grow as needed.
+
+Dynamic arrays for equate expressions (as data type).
+
+Complete the {\em \%\%TEXGROUP} mechanism. This is partly in place as
+described here. Using the {\em \%\%TEXGROUP} predefined macro in a similar
+way to the {\em \%\%TEXFILTER} one (although there is no distinction made
+between multiple arguments to one macro and multiple macros) apart from the
+question of the text body. Each group produces a sub database defined on the
+given filter condition, any records left over after all group filters have
+been applied are discarded. Each group is then sorted and filtered normally
+as per the {\em \%\%TEXSORTON} and {\em \%\%TEXFILTER} predefined macros.
+However, the final output is the concatenation of doing normal processing on
+each individual sub database. Each output group is headed by the text body
+of its defining group macro. This works like the banner text body, that is
+multiple definitions on one line as argument to one predefined macro share
+the group body, whereas individual macro definitions have a unique body. There
+should be equivalent equate macros for groups to the equate banner macros.
+Note that the maximum size of a group text body is STRMAX. Multiple filter
+definitions on one line will be or'ed but share the same text body, they only
+define one group. There can be up to N (limit) groups, one is defined for each
+macro call. This leaves the question of how filter definitions are and'ed.
+The mechanism for all this is in place, but is not acted upon as yet.
+
+For the dynamic DBF (*.txt) database type could also allow reading of the file
+from a local text body immediately following (like can be done for SQL queries)
+but if blank text body following just ignore it and load from file.
+
+Fix break/exit codes.
+
+Right hand side expressions for stroke operator would greatly simplify
+character assignment to strings.
+
+Fix bug where larg/rarg strings are reused incorrectly so that nested
+conditions under loops can mess up during reverse (if complex). Fixed?
+
+Fix some other oddities of equate reversing.
+
+Extend NAMCOL to also take arguments to assign to each input field name in
+turn - or better each arg is a database name to apply namcol to (rather than
+having as a global setting).
+
+Have compiler to take reversed equates into fast executable block.
+
+Only reverse/compile equates on demand (first call).
+
+Improved error reporting for equates - symbolic step by step debugger?
+
+Multiple RDBMS vendor support.
+
+Improve GUILE support.

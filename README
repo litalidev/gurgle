@@ -1,0 +1,204 @@
+gurgle - GNU Report Generator Language for PostgreSQL
+
+Copyright (C) University of Edinburgh, 1992-1997, 2001, 2003-4, 2008-10.
+All rights reserved.
+
+The Author, Tim Edward Colles, has exercised his right to be identified
+as such under the Copyright, Designs and Patents Act 1988.
+
+This file is part of gurgle.
+
+gurgle is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3, or any later version.
+
+gurgle is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with gurgle. If not, see <http://www.gnu.org/licences/>.
+
+GURGLE - GNU REPORT GENERATOR LANGUAGE
+======================================
+
+The GURGLE program reads record and field information from a dBase3+ file,
+delimited ascii text file or from an SQL query to a RDBMS and produces a
+report listing. Although the program was originally designed to produce
+TeX/LaTeX formatted output, plain ascii text, troff, PostScript, HTML,
+XML, shell scripts or any other kind of ascii based output format can be
+produced just as easily.
+
+The program is ideal for generating large bodies of text where small
+parts of that text are substituted with information from a database. So
+its great for generating mainly static web pages which have small amounts
+of dynamic content.
+
+The formatting process of is controlled by a definition file which holds
+the report, page, and record layouts, what fields to display, and where.
+Other useful functions supported in the definition file include sorting,
+filtering, and data manipulation of records in the databases.
+
+Below is a summary of the main features of GURGLE.
+
+  *   Support ASCII delimited text and dBase3+ databases
+  *   Supports GNUSQL, PostgreSQL, MySQL and CA-Ingres databases
+  *   Multiple input databases or queries
+  *   Sorting of database records
+  *   Automatic banner placement at the start of each sorted group
+  *   Filters using regular expressions or user defined functions
+  *   Five main text bodies - header, footer, record, 1st page, and Nth page
+  *   User defined macros and text bodies
+  *   User defined functions on field contents, including conditionals
+  *   User configurable input parsing patterns (default is like awk)
+  *   Include files
+  *   Environment variables
+  *   System variables
+  *   Multiple file output
+  *   General purpose processing language
+  *   Optional GUILE support
+
+DOWNLOAD
+--------
+
+The program can be downloaded by going to:
+
+  http://homepages.inf.ed.ac.uk/timc/gurgle/
+
+The URL for the current release is:
+
+  http://homepages.inf.ed.ac.uk/timc/gurgle/gurgle-1.61.tar.gz
+
+Alternatively goto the GNU home page at:
+
+  http://directory.fsf.org/project/gurgle
+
+UNPACK
+------
+
+To unpack do:
+
+  tar xvzf gurgle-1.61.tar.gz
+  cd gurgle-1.61
+
+If your tar command does not have compression support do:
+
+  gunzip -c gurgle-1.61.tar.gz | tar xvf -
+  cd gurgle-1.61
+
+CONFIGURATION
+-------------
+
+The program can be built with no RDBMS support or it can be built to
+include support for one (and only one) RDBMS. It can also be built with
+support for GUILE. See one of the specific installation sections below.
+
+DEFAULT INSTALLATION
+--------------------
+
+To compile, build and install the default version of GURGLE which has
+support for delimited text files and dBase3+ (.dbf) files but no support
+for a RDBMS do the following:
+
+  ./configure
+  make
+  make install
+
+If you want support for a RDBMS or you want support for GUILE see the
+specific installation sections below.
+
+GNUSQL RDBMS INSTALLATION
+-------------------------
+
+To compile, build and install a version of GURGLE which also has support
+for the GNUSQL RDBMS do the following:
+
+  ./configure --enable-gnusql
+  make
+  make install
+
+The "gsqlc" program (part of the GNUSQL distribution) will be required to
+pre-process the driver source and must be in your path.
+
+POSTGRESQL RDBMS INSTALLATION
+-----------------------------
+
+To compile, build and install a version of GURGLE which also has support
+for the PostgreSQL RDBMS do the following:
+
+  ./configure --enable-postgres
+  make
+  make install
+
+MYSQL RDBMS INSTALLATION
+------------------------
+
+To compile, build and install a version of GURGLE which also has support
+for the MySQL RDBMS do the following:
+
+  ./configure --enable-mysql
+  make
+  make install
+
+You may need to do the following before the ./configure so that the MySQL
+libraries are correctly found and used during compilation:
+
+  export LDFLAGS=-L/usr/lib/mysql
+
+INGRES RDBMS INSTALLATION
+-------------------------
+
+To compile, build and install a version of GURGLE which also has support
+for the CA-Ingres RDBMS do the following:
+
+  ./configure --enable-ingres
+  make
+  make install
+
+You may need to set the II_SYSTEM environment variable as appropriate to
+your local installation of CA-Ingres before the build so that the
+<EM>esqlc</EM> program (part of the CA-Ingres distribution) and libraries
+can be found.
+
+GUILE INSTALLATION
+------------------
+
+To compile, build and install a version of GURGLE which also has support
+for embedded GUILE equate processing do the following:
+
+  ./configure --enable-guile
+  make
+  make install
+
+The "--enable-guile" option can also be used in combination with any one
+of the specific RDBMS installations above.
+
+OTHER CONFIGURATION OPTIONS
+---------------------------
+
+Other standard configuration options are supported, to set a non-default
+installation path for example. See the INSTALL file for details on these.
+
+You may want to prefix the final program name based on the RDBMS name it
+has been built with, so for MySQL for example:
+
+  ./configure --enable-mysql --program-prefix=my
+
+would install the program as "mygurgle".
+
+DOCUMENTATION
+-------------
+
+The user manual is available as:
+
+  PDF:                 doc/gurgle.pdf
+  PostScript:          doc/gurgle.ps
+  HTML:                doc/gurgle.html
+  DVI:                 doc/gurgle.dvi
+  Info:                doc/gurgle.info*
+  Texinfo (source):    doc/gurgle.texi
+
+or online at:
+
+  http://homepages.inf.ed.ac.uk/timc/gurgle/gurgle.html

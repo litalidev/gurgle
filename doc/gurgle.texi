@@ -1,0 +1,4461 @@
+\input texinfo @c -*-texinfo-*-
+@c %**start of header
+@include version.texi
+@setfilename gurgle.info
+@settitle GURGLE - GNU Report Generator Language @value{VERSION} - User Manual
+@setchapternewpage off
+@c %**end of header
+
+@copying
+This manual is for Gurgle (version @value{VERSION}, updated @value{UPDATED}),
+which is a utility to produce formatted output from a variety of database
+inputs.
+
+Copyright @copyright{} University of Edinburgh, 1993-1997, 2001, 2003-4, 2008-10.
+All rights reserved.
+
+The Author, Tim Edward Colles, has exercised his right to be identified
+as such under the Copyright, Designs and Patents Act 1988.
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+A copy of the license is included in the section entitled "GNU
+Free Documentation License".
+@end quotation
+@end copying
+
+@dircategory Texinfo documentation system
+@direntry
+* gurgle: (gurgle)User Manual
+@end direntry
+
+@titlepage
+@title GURGLE - GNU Report Generator Language
+@subtitle User Manual
+@subtitle Version @value{VERSION} as at @value{UPDATED}.
+@author Tim Colles (@email{timc@@inf.ed.ac.uk})
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@contents
+
+@node Top, , (dir), (dir)
+
+@ifnottex
+@top GURGLE - GNU Report Generator Language
+This file documents GURGLE, the GNU Report Generator Language, a utility
+to produce formatted output from a variety of database inputs. This manual
+documents the release @value{VERSION} as at @value{UPDATED}.
+@end ifnottex
+
+@menu
+* Introduction::
+* Running GURGLE::
+* GURGLE File Format::
+* Equate Expressions::
+* Reversed Equate Expressions::
+* Hard Limits::
+* Text Processing::
+* RDBMS Queries::
+* Using GUILE::
+* Errors::
+* Examples::
+* GNU Free Documentation License::
+* Function Index::
+* Variable Index::
+* Concept Index::
+@end menu
+
+@node Introduction, , , Top
+@section Introduction
+
+@cindex GURGLE
+@cindex Report generation
+@cindex Features
+The @strong{gurgle} program reads record and field information from a @strong{dBase3+} file,
+delimited ascii text file or from an SQL query to a RDBMS and produces a
+report listing. Although the program was originally designed to produce
+@emph{TeX/LaTeX} formatted output, plain ascii text, @emph{troff}, @emph{PostScript}, @emph{HTML},
+@emph{XML}, shell scripts or any other kind of ascii based output format can be produced just
+as easily.
+
+The program is ideal for generating large bodies of text where small
+parts of that text are substituted with information from a database. So
+its great for generating static web pages which have some dynamic content.
+
+The formatting process of is controlled by a definition file which holds
+the report, page, and record layouts, what fields to display, and where.
+Other useful functions supported in the definition file include sorting,
+filtering, and data manipulation of records in the databases.
+
+Below is a summary of the main features of @strong{gurgle}.
+
+@itemize @bullet
+@item
+Support ASCII delimited text and dBase3+ databases
+@item
+Supports GNUSQL, PostgreSQL, MySQL and CA-Ingres databases
+@item
+Multiple input databases or queries
+@item
+Sorting of database records
+@item
+Automatic banner placement at the start of each sorted group
+@item
+Filters using regular expressions or user defined functions
+@item
+Five main text bodies - header, footer, record, 1st page, and Nth page
+@item
+User defined macros and text bodies
+@item
+User defined functions on field contents, including conditionals
+@item
+General purpose processing language
+@item
+User configurable input parsing patterns (default is like @emph{awk}).
+@item
+Include files
+@item
+Environment variables
+@item
+System variables
+@item
+Multiple file output
+@item
+Optional GUILE support
+@end itemize
+
+@node Running GURGLE, , , Top
+@section Running GURGLE
+
+@cindex Running GURGLE
+@cindex Starting
+@cindex Generating a report
+@cindex GURGLE definition files
+@cindex Debug options
+@cindex Command line options
+The @code{gurgle} program takes one argument, the name of the definition file
+to use. This can be given with or without a @code{.grg} extension. If the
+@code{.grg} extension is not given with the filename and a filename without
+the extension is found then this will be used, else the @code{.grg} extension
+will be automatically appended and a filename must exist with this extension.
+
+The default output file name will be the basename of the @sc{grg} file
+with @code{.tex} as the replacement extension. For example, if the
+@sc{grg} file to be used is @code{test.grg} then the program would be
+called as @code{gurgle test} (or @code{gurgle test.grg}) and the output file produced
+by the program, according to the directions given in the @code{test.grg} file
+would be @code{test.tex}.
+
+The default output filename and extension can be easily changed from within the
+@sc{grg} file. The output filename can also be changed at certain points
+during generation of the output so that multiple files can be created
+from one input database file.
+
+There is only one fixed option that can be given to the @code{gurgle} program, and this
+is @code{-d[1234]}. All variants enable debug mode. When the @code{-d} option is
+used the program will display the @sc{grg} file subsequent to preprocessing
+and will also dump the contents of user defined macros, equates, environment
+variables, as well as the definitions assigned to system variables, and the
+text bodies. The @code{-d1} variant dumps DFA state tables (from pattern
+matching definitions). The @code{-d2} variant does the same as @code{-d1} but
+also dumps the actual processing of pattern definitions. The @code{-d3} variant
+does the same as @code{-d} but also dumps the memory allocations during
+pre-preocessing and output processing. The @code{-d4} variant dumps details of
+the loading and field references of any @code{.dbf} file.
+
+The @sc{grg} file is processed in two stages (see @ref{Structure}
+and @ref{Processing Sequence} for more details). The first stage reads all the
+predefined macro definitions and expands any user defined macros. The entire
+file is broken down into its component parts and stored internally. The output
+file is then generated in the second stage by writing the stored text bodies
+at the appropriate places. The record text body is written for each record in
+the master database file (subject to sort and filter definitions), and the
+page text bodies are written at the start of each page. The header text body
+is written at the start before anything else and the footer text body is
+written at the end after everything else. References to database fields,
+interpolation of user text bodies, and processing of equates are all done
+at this stage.
+
+The @sc{grg} file can have as its first line a @code{#!} sequence followed by the
+path of the @code{gurgle} program and can then be made self-executable exactly
+like a shell script. Note however that only a line starting with @code{#} as the
+first line in the @sc{grg} file is interpreted this way and that @code{#} does
+not start a comment line in any other place in the file (as it would in a
+shell script). Command line options and arguments can be included after the
+path so a line like @code{#!/usr/local/bin/gurgle -d} is acceptable. This is one
+situation where it is common to not have the @code{.grg} extension as part
+of the filename.
+
+The above allows the @sc{grg} file to act as a filter in a pipe by defining
+the database input file to be standard input and redefining the output file to
+be standard output.
+
+The @code{gurgle} program will accept any number of additional command line
+arguments where each is a predefined macro and its arguments (these are
+discussed in more detail in @ref{Predefined Macros}). These are processed
+after parsing the @sc{grg} file. This is so that the command line arguments
+can overwrite any value in the @sc{grg} file.
+The processing order is described in more detail in
+@ref{Processing Sequence}.
+A predefined macro argument can include quotes and escaped quotes. These must
+be given differently in a command line argument to prevent shell escape.
+The format for a nested quote is @code{\"} and for a nested escaped quote
+is @code{\\\"}. For example, @code{gurgle fubar.grg "%%equate eq_init 1>>_eq_trace"}, is a command line which
+starts up tracing while processing equates in @code{fubar.grg}. Note that it
+is safest when using command line predefined macros to always include a
+terminating macro to avoid any possible continuation errors (when the actual
+file is processed). So it is better to do:
+
+@example
+gurgle fubar.grg "%%equate eq_init 1>>_eq_trace" "%%end"
+@end example
+
+The @code{gurgle} program will also accept any number of additional command
+line arguments in any format which custom processing can be added to either
+convert them into predefined macros or to set internal values etc. See later
+section on this.
+
+@node GURGLE File Format, , , Top
+@section GURGLE File Format
+
+@cindex File format
+@cindex Definition file format
+@cindex GURGLE file format
+@cindex Defining a report
+The @sc{grg} file defines what the input database files are, what the
+formatted output is to look like, and how to process the input to get to
+the output. It takes the form of a list of predefined macros (one per line),
+most of which take arguments, and all of which are optional (except@sc{ 
+database} of which there must be at least one, see
+@ref{DATABASE}). These have three
+general forms. They can define an internal structure or process (such as how
+to sort or filter the data). They can define user macros and equations that
+are expanded within text bodies. They can define text bodies themselves. A
+text body is a block of text associated with a particular page or output
+position.
+
+@menu
+* Structure::
+* Processing Sequence::
+* Environment Variables::
+* Predefined Macros::
+@end menu
+
+@node Structure
+@subsection Structure
+
+@cindex Input file structure
+@cindex Definition file structure
+@cindex GURGLE, file structure
+@cindex Structure
+A @sc{grg} file is processed in three modes. The default is @sc{standard}
+mode where only predefined macro lines, comment lines or blank lines may be
+seen. Anything else will be treated as an error. The @sc{args} mode is used
+to process each of the arguments following a predefined macro name, until a
+newline where the mode reverts to @sc{standard} mode again. Some predefined
+macros may switch processing to the @sc{text body} mode. Within this mode
+user defined macros are expanded and equates are called. User defined macros
+are not expanded anywhere else. From @sc{text body} mode @sc{standard} mode
+is returned to when a predefined macro is encountered. The @sc{equate} mode
+is a special variant of @sc{text body} mode used only for processing equate
+definitions (user defined macros are also expanded in this mode).
+
+Comments can be included in a @sc{grg} file in the @sc{standard} mode and
+the @sc{text body} mode. They are flagged by a @code{%%} sequence, followed
+by at least one whitespace character (space, tab or newline). This sequence
+and anything else up to and including a newline will be discarded. In
+@sc{text body} mode comments can only occur at the very start of a line (no
+preceeding whitespace) whereas in @sc{standard} mode there can be any amount
+of preceeding whitespace on the line. In the @sc{equate} mode C style
+comments are also supported and can occur anywhere. They are started with a
+@code{/*} sequence and ended with a @code{*/} sequence. Unlike C, nested comments
+are allowed.
+
+@node Processing Sequence
+@subsection Processing Sequence
+
+@cindex Processing sequence
+@cindex GURGLE, processing sequence
+This is the processing sequence including command line arguments, built in
+equates, text bodies, and the actual database file. Some of the terms may not
+be familiar yet but are explained further in later sections. Not all events are
+listed below, just the more important ones.
+
+@enumerate
+@item
+Initialise built in equates to void
+@item
+Initialise built in system variables
+@item
+Parse command line arguments
+@item
+Parse @code{.grg} file
+@item
+Parse command line arguments (second time)
+@item
+Update environment variables and system variables
+@item
+Execute @code{eq_init} equate
+@item
+Load database files
+@item
+Open output file
+@item
+Set @code{_eq_totrec} to size of master database file
+@item
+Sort records in master database file
+@item
+Execute @code{eq_pre_header}
+@item
+Process @sc{header} text body
+@item
+Execute @code{eq_post_header}
+@item
+For each record in sorted/filtered master database
+@enumerate
+@item
+Set @code{_eq_currec}
+@item
+If this is page 1
+@enumerate
+@item
+Execute @code{eq_pre_page01}
+@item
+Process @sc{page01} text body
+@item
+Execute @code{eq_post_page01}
+@end enumerate
+@item
+If this is page N
+@enumerate
+@item
+Execute @code{eq_pre_pagenn}
+@item
+Process @sc{pagenn} text body
+@item
+Execute @code{eq_post_pagenn}
+@end enumerate
+@item
+If this is a valid banner point
+@enumerate
+@item
+Set @code{_eq_banner_val}
+@item
+Set @code{_eq_banner_nest}
+@item
+Execute @code{eq_pre_banner}
+@item
+Process @sc{banner} text body
+@item
+Execute @code{eq_post_banner}
+@end enumerate
+@item
+Execute @code{eq_pre_record}
+@item
+Process @sc{record} text body
+@item
+Execute @code{eq_post_record}
+@end enumerate
+@item
+Execute @code{eq_pre_footer}
+@item
+Process @sc{footer} text body
+@item
+Execute @code{eq_post_footer}
+@item
+Execute @code{eq_exit} equate
+@item
+Close output file
+@end enumerate
+ 
+@node Environment Variables
+@subsection Environment Variables
+
+@cindex Environment Variables
+@cindex Variables, Environment
+Environment variables are internal defaults which can be altered directly
+from within the @sc{grg} file. Normally this is done with the
+@sc{define} predefined macro to redefine their value, although
+there are a few exceptions.
+
+@menu
+* NPAGE::
+* FESCSUB::
+* TEXEXT::
+* DELIM::
+* DFAMODE::
+* CONCAT::
+* MKDIR::
+* PHYSDB::
+* DBHOSTNM::
+* DBUSERNM::
+* DBPASSWD::
+* EXPAND::
+* NAMCOL::
+* DEFCOL::
+* NULL::
+* PAGE1 and PAGEN::
+@end menu
+
+@node NPAGE
+@subsubsection NPAGE
+
+@vindex NPAGE
+@cindex Paging, page breaks
+@cindex Page Breaks
+The @strong{NPAGE} variable holds the value @code{grg} uses to start a new page.
+Its default value is @code{\newpage} (for LaTeX), but it can be redefined
+to anything (a linefeed control character for example). The example program
+fragment below resets the @strong{NPAGE} variable to the null string.
+
+@example
+%%DEFINE NPAGE
+@end example
+
+@node FESCSUB
+@subsubsection FESCSUB
+
+@vindex FESCSUB
+@cindex Escaping, percent character
+The @strong{FESCSUB} variable controls whether the
+percent escaping is done for real. Normally a @code{\%} sequence in a text
+body is left as it is (since @emph{LaTeX} needs the percent character to be
+escaped), however if this variable is set, then the @code{\%} sequence will be
+replaced by just a @code{%}. The percent character has to be escaped because
+it conflicts with the field name identifier. The example program fragment
+below sets the @strong{FESCSUB} variable. There is no way to reset it.
+
+@example
+%%DEFINE FESCSUB
+@end example
+
+@node TEXEXT
+@subsubsection TEXEXT
+
+@vindex TEXEXT
+@cindex File Extension
+The @strong{TEXEXT} variable holds
+the file extension of the output filename (that which replaces the @code{.grg}
+part). Normally a @code{.tex} extension is used (for LaTeX). The example program
+fragment below sets the value to @code{.html}.
+
+@example
+%%DEFINE TEXEXT .html
+@end example
+
+@node DELIM
+@subsubsection DELIM
+
+@vindex DELIM
+@cindex Patterns, delimiter
+@cindex Inputs, delimiter
+@cindex Text Database Files, delimiter
+The @strong{DELIM} variable takes an argument each character of which is the
+value to use as a field delimiter in a database file which is delimited ascii
+text. The default is space and tab for @emph{awk} style processing. Actually
+sets the contents of the @code{<del>} token. The example program fragment below sets
+the value to @code{~}. the first character of the @strong{DELIM} value is also used as
+a field separator in the default header and record text bodies.
+
+@example
+%%DEFINE DELIM ~
+@end example
+
+@node DFAMODE
+@subsubsection DFAMODE
+
+@vindex DFAMODE
+@cindex Patterns, mode
+@cindex Input Mode
+The @strong{DFAMODE} variable holds the initial mode of the DFA.
+Normally set to @code{<awk><nul>} for processing delimited ascii text like input to
+@emph{awk} (fields separated by space or tab, one record per line). It would
+only be necessary to change this when a new pattern matching style has been
+defined so that it can be used instead. The example program fragment below sets
+the value to @code{<usr><nul>} where this would be a user defined pattern.
+
+@example
+%%DEFINE DFAMODE <usr><nul>
+@end example
+
+@node CONCAT
+@subsubsection CONCAT
+
+@vindex CONCAT
+@cindex Concatenation
+@cindex Output File, appending
+@cindex Appending to output
+The @strong{CONCAT} variable when set means that generated
+output is appended to the defined output file, rather than the output file
+being recreated on each run which is the default. Has no affect on any files
+generated during processing other than the main output file. The example
+program fragment below sets the variable, there is no way to reset it.
+
+@node MKDIR
+@subsubsection MKDIR
+
+@vindex MKDIR
+@cindex Directory path construction
+@cindex Output File, directory path
+@cindex Making directory paths
+The @strong{MKDIR} variable when set means that the directory path of
+the generated output file will be created if it does not already exist.
+This allows the construction of trees of output files.
+The example
+program fragment below sets the variable, there is no way to reset it.
+
+@example
+%%DEFINE MKDIR
+@end example
+
+@node PHYSDB
+@subsubsection PHYSDB
+
+@vindex PHYSDB
+@cindex SQL database files, physical
+@cindex Physical database
+The @strong{PHYSDB} variable holds the name of the @emph{Ingres} physical database
+to which an SQL query is to be directed. This variable @strong{must} be defined
+whenever an SQL database file is used otherwise an error will be generated.
+Only one physical database can therefore be referred to from one @sc{grg} file.
+The example program fragment below sets the physical database name to @code{mydb}.
+
+@example
+%%DEFINE PHYSDB mydb
+@end example
+
+This variable is not needed if the @emph{GNU SQL Server} database is being used
+as this does not support multiple physical databases.
+
+@node DBHOSTNM
+@subsubsection DBHOSTNM
+
+@vindex DBHOSTNM
+@cindex SQL database files, database server
+@cindex Database server
+The @strong{DBHOSTNM} variable holds the name of the database server to
+which an SQL query is to be directed. Normally just localhost.
+The example program fragment below sets the database server host to @code{dbhost.dummy.uni.ac.uk}.
+
+@example
+%%DEFINE DBHOSTNM dbhost.dummy.uni.ac.uk
+@end example
+
+@node DBUSERNM
+@subsubsection DBUSERNM
+
+@vindex DBUSERNM
+@cindex SQL database files, database user
+@cindex Database user
+The @strong{DBUSERNM} variable holds the name of the user to use
+when an SQL query is made. Defaults to current user.
+The example program fragment below sets the user to @code{jbloggs}.
+
+@example
+%%DEFINE DBUSERNM jbloggs
+@end example
+
+@node DBPASSWD
+@subsubsection DBPASSWD
+
+@vindex DBPASSWD
+@cindex SQL database files, database password
+@cindex Database password
+The @strong{DBPASSWD} variable holds the password of the user to use
+when an SQL query is made. Not required if the user can connect without
+giving a password.
+The example program fragment below sets the password to @code{Joe25}.
+
+@example
+%%DEFINE DBPASSWD Joe25
+@end example
+
+Including a plain text password within the definition file is insecure
+and the file should generally be protected against anyone seeing it.
+The CA-Ingres database will automatically prompt for a password if not
+given in the definition file. Alternatively custom user arguments can
+be added to process a password given on the command line and to set
+this variable.
+
+@node EXPAND
+@subsubsection EXPAND
+
+@vindex EXPAND
+@cindex SQL database files, expansion
+@cindex Equates, expansion in SQL
+@cindex Fields, expansion in SQL
+@cindex Expansion
+The @strong{EXPAND} variable when set means that any SQL as a database
+is pre-processed and any # or % reference substituted with the actual
+equate or field value exactly as in text bodies. This allows the results
+of one SQL query to be fed into the construction of another one.
+Normally only user defined macros (%%) are expanded in an SQL query
+but only when the definition file is loaded. The default is not to
+expand # or % due to the possible clashes with regular SQL. Note that
+when set the expansion applies to every defined query.
+
+The example program fragment below sets expansion, there is no way
+to reset it.
+
+@example
+%%DEFINE EXPAND
+@end example
+
+@node NAMCOL
+@subsubsection NAMCOL
+
+@vindex NAMCOL
+@cindex Column naming
+@cindex Field naming
+@cindex Fields, names
+The @strong{NAMCOL} variable when set means that the field names
+given to columns from an SQL query will take the name given in the SQL query
+itself. The default behaviour is to generate numbered names for columns
+in the
+same way as for delimited ascii files. Note that internally column names are
+held in uppercase and have a maximum of ten characters so SQL column names from
+the query may be truncated and will be mapped to uppercase for the purposes of
+field reference within the @sc{grg} file. The example program fragment below
+sets @strong{NAMCOL} so that columns are named, there is no way to reset it once
+the value has been changed. Note also that it applies to all queries so
+either all database files defined as SQL queries will have named columns or
+none of them will.
+
+@example
+%%DEFINE NAMCOL
+@end example
+
+If the @strong{NAMCOL} variable is set then the column names for any text
+delimited database files will be taken from the field values of the first
+record in the file and that record will then be discarded.
+
+@node DEFCOL
+@subsubsection DEFCOL
+@vindex DEFCOL
+@cindex Column typing
+@cindex Field typing
+@cindex Fields, types
+The @strong{DEFCOL} variable when set means that the field names
+given to columns from an SQL query will take the name given in the SQL query
+itself. The default behaviour is to generate numbered names for columns
+in the
+same way as for delimited ascii files. Note that internally column names are
+held in uppercase and have a maximum of ten characters so SQL column names from
+the query may be truncated and will be mapped to uppercase for the purposes of
+field reference within the @sc{grg} file.
+
+
+If the @strong{DEFCOL} variable is set then the column types for any text
+delimited database files will be taken from the field values of the first
+record in the file (or second if @strong{NAMCOL} is also used) and that
+record will then be discarded. The example program fragment below
+sets @strong{DEFCOL} so that columns are typed, there is no way to reset it once
+the value has been changed. Note also that it applies to all databases so
+either all database files defined as delimited text will have typed columns or
+none of them will.
+
+@example
+%%DEFINE DEFCOL
+@end example
+
+An example input file with named and typed columns might look like the below.
+The first two records are absorbed and discarded after setting the column
+names and types from them.
+
+@example
+FIRST LAST AGE
+C C N
+Joe Bloggs 55
+@end example
+
+The possible type codes are C for character data, N for numeric data, D
+for date data and L for logical (boolean) data.
+
+@node NULL
+@subsubsection NULL
+
+@vindex NULL
+@cindex NULL Handling
+@cindex SQL database files, NULL handling
+The @strong{NULL} variable holds a value which defines what will be
+used for @code{null} values returned from an SQL query. This is required because
+@sc{gurgle} does not have an explicit @code{null} value. The default is to
+just leave @code{null} values as an empty string. The example program fragment below
+defines @strong{NULL} so that @code{null} values are replaced with the dash character.
+
+@example
+%%DEFINE NULL -
+@end example
+
+@node PAGE1 and PAGEN
+@subsubsection PAGE1 and PAGEN
+
+@vindex PAGE1
+@vindex PAGEN
+@cindex Paging, setting up pages
+@cindex Page breaking
+@cindex Line breaking
+The @strong{PAGE1} and @strong{PAGEN} variables set the number of records per page
+for the first page and every other page respectively. They are normally both
+set to one. Unlike the other environment variables these are set with two
+unique predefined macros. Each macro can also be used to define the text body
+associated with the start of the first page or every other page. In the
+example program fragment below the number of records is set to three
+on the first page and four on every subsequent page.
+
+@example
+%%PAGE01 3
+%%PAGENN 4
+@end example
+
+The @sc{page01} and @sc{pagenn} predefined macros can also
+take a second numeric argument. This is the number of lines per page. If the
+number of lines per page is execeeded then this will cause a page break
+irrespective of the number of records per page. The number of records
+per page however is not reset, and so this also will cause a page break.
+By setting one or other of these paramaters to 0 then the behaviour can
+be defined as n records per page, or n lines per page. It is illegal to
+set both parameters to 0. The default with no arguments specified is
+0 for lines per page (not used) and infinite for records per page (there
+will be no automatic page breaks). Note that lines per page includes lines from
+the header and footer text bodies, but that records per page doesn't. This
+mechanism can be used to handle variable length records in plaintext based
+output, it is of less use for @emph{LaTeX} output. If there is no
+@sc{page01} definition then all pages will use the definition given
+for @sc{pagenn}. See @ref{PAGE01} and
+@ref{PAGENN} for further details.
+
+@node Predefined Macros
+@subsection Predefined Macros
+
+@cindex Predefined Macros
+@cindex Macros, Predefined
+Predefined macros must start at the beginning of a line (or only be preceeded
+by whitespace on the line). There must be nothing else on the line other than
+any arguments to the predefined macro. Predefined macros are not case
+sensitive (all upper case or all lower case or mixed case will be treated as
+the same macro name), for example @code{%%Sorton} is identical to
+@code{%%SORTON}.
+Predefined macros cannot be used within a text body. They can occur
+in any order (there are no dependencies during parsing) with the exception
+that user defined macros must be defined before they are used (otherwise they
+will not be expanded).
+
+All predefined macros start with a @code{%%} sequence, followed by the rest
+of the macro name.
+
+Some predefined macros have arguments. These have the following forms. A
+@emph{numeric} argument is any decimal number. A @emph{string} argument is 
+enclosed in double quotes and can include any character except a double
+quote. A @emph{string} argument cannot extend over a newline. A @emph{field}
+argument is the name of a database field. As in text bodies the name must
+be in capitals and should be preceeded by the @code{%} character. A
+@emph{macro} argument is a macro name followed by a space or a newline. If
+followed by a space then anything else up to a newline is taken to be the
+macros definition. A macro name must start with an alphabetic or underscore
+character, but can be followed by any upper or lower case alphabetic character,
+numeric character, or underscore character. Note that unlike predefined
+macros the macro name is case sensitive.
+
+Other predefined macros start a text body on the following line. A text body
+can include almost any characters whatsoever. A text body is terminated by any
+line starting with a @code{%%} sequence and followed by a valid predefined
+macro. A line starting with @code{%%}
+followed by whitespace will be treated as a comment and discarded from the text
+body. Apart from at the start of a line a @code{%%} sequence is treated as
+the start of a user defined macro or equate the name of which should
+immediately follow. In the
+former case the user defined macro is expanded and the definition replaces the
+@code{%%} and user defined macro name sequence. Similarly an equate is
+processed and the result expanded in place (an equate need not return a result
+in which case the result will be blank and the @code{%%} plus equate name
+sequence is removed). The @code{#} sequence can also be used to refer to an
+equate to process and expand (but not a user defined macro). This could be
+used where an equate name and a user defined macro name share the same name,
+since if a macro of the same name exists this will always be favoured over
+the equate, but by using a hash character instead it makes it explicit that
+an equate is being called and not a user defined macro.
+
+The name of an equate can be immediately followed by @code{(...)} which contains
+a comma separated list of arguments to the equate, each argument can be any
+expression (or expressions) that results in a value. The equate name and the
+entire contents of the brackets is replaced by the evaluation of the equate and
+argument expressions. Note that the argument expressions should be given in
+unreversed order if the equate was defined unreversed and reversed order
+otherwise.
+
+If the result of an equate that is called from within a text body is a
+string which is itself an equate (or includes an equate) then this will get
+reprocessed and so on. This is similar to the way user defined macros will
+continually get expanded.
+
+A @code{\<newline>} sequence at the end of a line in a text body will
+escape the newline. This is useful if a text body is a one line equate call
+that may not print anything, without adding this to the end you will always
+get at least one blank line.
+
+A @code{%} sequence followed by a field name in a text body will be expanded
+with the contents of that field from the current record of the master database
+file.
+
+@menu
+* INCLUDE::
+* DEFINE::
+* DATABASE::
+* MASTERDB::
+* SORTON::
+* REVSORT::
+* FILTER::
+* EQUATE::
+* EQGUILE::
+* HEADER::
+* FOOTER::
+* BANNER::
+* PAGE01::
+* PAGENN::
+* RECORD::
+* BLOCK::
+* PATTERN::
+* END::
+@end menu
+
+@node INCLUDE
+@subsubsection INCLUDE
+
+@findex INCLUDE
+@cindex Macros, including files
+@cindex Files, include files
+@cindex Including Files
+@cindex Header Files
+Use this macro to include another file (or multiple files) into the current
+file. This macro should be followed by one or more @emph{string} arguments. Each
+should be the full name of a file to include at this point. The included file
+can also include other files. Each include file cannot be bigger than the
+maximum text body size, and if multiple include files are given as arguments
+to this macro then the summed size of all the include files given cannot
+be more than the maximum text body size. The example below shows three files
+being included.
+
+@example
+%%INCLUDE "header.grg" "footer.grg"
+%%INCLUDE "record.type1"
+@end example
+
+@node DEFINE
+@subsubsection DEFINE
+
+@findex DEFINE
+@cindex Macros, user defined
+@cindex Defining Macros
+@cindex User Defined Macros
+Use this macro to define or redefine user macros. These can then be used in
+text bodies where they will be fully expanded. A macro definition can itself
+include user macros in the same way as text bodies (these will only be
+expanded from within the text body). However, predefined macros cannot be used
+in user macro definitions, nor can they be defined or redefined.
+This macro takes a @emph{macro} argument which can either be just the name of
+the user macro being defined, or can be the name followed by the replacement
+text for that macro. To include a user macro in a text body or a macro
+definition it should be preceeded by a double percent character sequence.
+The example program fragment below defines three user macros, and also shows
+how they are used within a macro definition and a text body.
+
+@example
+%%DEFINE TITLE This is the Title
+%%DEFINE BOLD \bf
+%%DEFINE BOLDTITLE @{%%BOLD %%TITLE@}
+%%HEADER
+\centerline@{%%BOLDTITLE as at @{%%BOLD \today@}@}
+@end example
+
+Note that a user macro definition can also include field names and equate
+macros. However, if using equate macros the name of the equate macro must be
+preceeded by a hash character rather than a double percent character sequence
+as done normally. The equate macro name need not have been defined before it
+is used in a user macro definition (since processing of equates occurs at a
+later stage.
+
+There is no error when redefining a user macro. The new replacement text is
+just substituted for the old.
+
+@node DATABASE
+@subsubsection DATABASE
+
+@findex DATABASE
+@cindex Macros, defining databases
+@cindex Macros, input files
+@cindex Databases, defining
+Use this macro to specify the database files, the names of the @emph{dBase3+} files (or delimited text files) from which the
+records and fields are being taken. There can be one or more @emph{string}
+arguments which are the full names (or pathnames) of the file to use (the
+@code{.dbf} file extension is also required in the name). If the extension is
+not @code{.dbf} then the file will be read in as a delimited ascii file using
+@emph{awk} field/record style input by default, see
+@ref{Text Processing}. The one exception to this is
+where the extension is @code{.sql} where the database file name is then just a
+table to query in a RDBMS, see @ref{RDBMS Queries}. The example
+program fragment below shows all three file types in use.
+
+@example
+%%DATABASE "/usr/local/lib/dbase/example.dbf"
+%%DATABASE "ref1.txt" "ref2.txt"
+%%DATABASE "people.sql"
+@end example
+
+The first database file has a path of @code{/usr/local/lib/dbase/}, a name of
+@code{example} and a type of @code{.dbf} and will be opened as a @emph{dBase3+} file.
+The next two database files have no path (so must be in the current directory),
+names of @code{ref1} and @code{ref2} respectively and are both opened as delimited ascii
+files. The third database file has no path (does not need one) and is
+treated as an SQL query selecting the entire contents of the @code{people} table
+(@code{people} will also be the name of the database file) from a RDBMS.
+
+The first database file defined is always taken as the master database file
+(that which text body processing, sorting and filtering acts on and through
+which records are cycled). Other database files can only be accessed
+indirectly through the pointer mechanism of equate processing (
+@pxref{Field Reference}).
+
+The special case filename which is just @code{"-"} can be used to read a database file
+from standard input (this would normally always be specified as the first
+database file so that it is also the master). A database file specified as
+@code{"-"}
+will always be loaded as a delimited ascii file.
+
+Note that there must be at least one @sc{database} command in every@sc{ 
+grg} file, in fact the smallest @sc{grg} file would just consist of one of
+these lines to define the database file --- the default header and record text
+bodies would then define the format of the output file automatically.
+
+@node MASTERDB
+@subsubsection MASTERDB
+
+@findex MASTERDB
+@cindex Macros, defining databases
+@cindex Macros, input files
+@cindex Databases, defining
+@cindex Databases, master
+
+Identical to the @sc{database} macro except that it sets this database to
+be the master database. The master database is the one through which record
+looping occurs and the default text bodies are output. Without using this
+macro the master database is always the first database loaded. This macro
+can be used repeatedly in place of the @sc{database} macro, the master
+database would then be the last database loaded.
+
+@node SORTON
+@subsubsection SORTON
+
+@findex SORTON
+@cindex Macros, sorting
+@cindex Sorting
+@cindex Sorting, ascending
+@cindex Ascending Sort
+Use this macro to define how to sort the records in the master database file.
+If this is not used the records will be written out from the database file in
+the order they are stored in the file (or retrieved by the SQL query). This
+macro can be followed by up to four @emph{field} arguments (or the predefined
+macro can be used up to four times if only given one argument each time). The
+records will be sorted alphabetically on the first field given, and each
+sorted group (of the same value) will then be resorted on the second field
+given, etcetera. The @sc{banner} macro can be used to produce a header
+at the start of each sorted group. The example below sorts first on the
+@code{YEAR} field, and then on the @code{SURNAME} field for each sorted
+group within this.
+
+@example
+%%SORTON %YEAR %SURNAME
+@end example
+
+Note that sorting on boolean type data fields works as follows. A boolean
+field with a value of @code{T} or @code{Y} is treated as true and identical,
+anything else is treated as false and also identical. This supports the
+@emph{dBase3+} syntax for logical fields.
+
+@node REVSORT
+@subsubsection REVSORT
+
+@findex REVSORT
+@cindex Macros, reverse sorting
+@cindex Sorting, descending
+@cindex Descending Sort
+Just like @sc{sorton} except that it sorts the given field arguments
+in descending order (@sc{sorton} sorts in ascending order). The two
+sorts can be freely mixed. The example below sorts on the @code{YEAR} field
+in descending order, and then for each sorted year group sorts on the
+@code{SURNAME} field in ascending order.
+
+@example
+%%REVSORT %YEAR
+%%SORTON %SURNAME
+@end example
+
+@node FILTER
+@subsubsection FILTER
+
+@findex FILTER
+@cindex Macros, filtering
+@cindex Filtering
+Use this macro to define how to filter the records (restrict the output) in
+the master database file. By default no filtering is done. There is a maximum
+number of filter conditions, which can either be given as multiple arguments to
+this macro or this macro can be used more than once. Each filter condition
+given as a multiple argument to one predefined macro is or'ed together. Each
+predefined macro call is and'ed with any others. Each filter condition is
+given as a @emph{string} argument. Only records matching the given conditions
+will be processed. A record is written out if it matches at least one of
+the or'ed filter conditions from all of the and'ed filter conditions.
+
+The filter condition has the syntax @code{field=re}. The @code{field} is the
+name of a database field, including the @code{%} character identifier. The
+@code{re} is a regular expression with the same syntax as used in the @sc{unix}
+@code{ed(1)} and @code{sed(1)} commands. There should be no spaces in the
+condition unless they are required in the regular expression. There is an
+example program fragment below with some filter conditions defined.
+
+@example
+%%FILTER "%STATUS=ENDED" "%STATUS=FAILED"
+%%FILTER "%YEAR=199[123]"
+@end example
+
+The above would write out all records that have a @code{STATUS}
+field of @emph{ENDED} or @emph{FAILED} and have a @code{YEAR} field
+with the value @emph{1991}, @emph{1992}, or @emph{1993}.
+
+You can define a filter condition that is an equate rather than a regular
+expression by using the special field name @code{%_EQ}. The equate
+expression should return a boolean, numeric, date, or string type. The filter
+condition matches if the number or boolean is not 0 or the date or string is
+not empty. The two filters conditions given below are identical. See
+@ref{EQUATE} for details of equate expression syntax. Note that
+the equate must be a reversed equate expression, it will not currently be auto
+reversed if it is not and keywords will not be recognised. Nested string
+quotes must be escaped within a filter condition.
+
+@example
+%%FILTER "%STATUS=ENDED"
+%%FILTER "%_EQ=%STATUS\"ENDED\"="
+@end example
+
+Beware of recursive definitions of a filter condition using a @code{(...)}
+looping construct --- since this in itself depends on the filter condition.
+
+@node EQUATE
+@subsubsection EQUATE
+
+@findex EQUATE
+@cindex Macros, conditional equate expressions
+@cindex Macros, defining conditional equates
+@cindex Conditional Equate Expressions
+This macro works in a similar way to @sc{define} except that it
+defines a user macro whose ultimate value is dependent on the processing of
+the equate expression. It provides a level of processing that occurs after
+preprocessing (unlike ordinary user macros). Although user defined macros
+are not expanded within an equate definition, equates will be but they
+should be prefixed by the @code{#} character (not @code{%%}).
+
+Only simple conditional equate expressions are discussed here (that can be used
+to do something like an ifdef pragma). In fact equate expressions can be much
+more complex but the details of this are given in
+@ref{Equate Expressions} on equate
+expressions and @ref{Reversed Equate Expressions} on reversed equate expressions.
+ 
+The argument given to this predefined macro is a @emph{macro} argument as for
+defining user macros. However the macro definition part is slightly more
+complex in that it supports the @code{?} operator. The syntax for this is
+@code{?field["string"]:["string"];}. The square brackets surround optional
+syntax.
+
+The semantics of the @code{?} operator are that if the value of the given
+@code{field} is null (or equals 0 or 0.0 in the case of numeric fields) then
+do not print the field at all. So in the program fragment below
+
+@example
+%%EQUATE EXAMPLE ?YEAR:;
+@end example
+
+the @code{EXAMPLE} equate macro has a definition saying if the value of the
+@code{YEAR} field is null print nothing else print the value of the
+@code{YEAR} field. This is a shorthand notation for the example below.
+
+@example
+%%EQUATE EXAMPLE ?YEAR"%YEAR":;
+@end example
+
+The definition for this example says that if the value of the @code{YEAR}
+field is null print nothing, else evaluate the following string. The example
+below shows the third possible form of this operator.
+
+@example
+%%EQUATE EXAMPLE ?YEAR"%YEAR":"Unknown";
+@end example
+
+The definition for this example says that if the value of the @code{YEAR}
+field is null evaluate the string following the colon character, else evaluate
+the string preceeding the colon character.
+
+Below is a more complex example program fragment which also shows how the
+equate macro is used within a text body.
+
+@example
+%%EQUATE NAME ?NAME1:"";?NAME2"; %NAME2":"";+
+%%EQUATE SALARY \
+  ?SALARY"Salary is %SALARY":"No Salary for #NAME";
+%%RECORD
+Details: %%NAME, %%SALARY
+@end example
+
+In the above example the @code{NAME} equate prints the contents of the @code{NAME1} field
+only if it isn't null and follows this with nothing if the contents of the @code{NAME2} is
+null else with a semicolon followed by the contents of the @code{NAME2} field.
+Note the @code{+} operator to concatenate the results from each condition into
+one (an equate must return only one value) and as a result of this each
+condition must always return a value so @code{""} is used in the @code{else} clause
+to return an empty string when the field is empty.
+The @code{SALARY} equate prints a different string dependent on whether the
+contents of the @code{SALARY} field is null or not. Note that the last string actually
+includes a nested call to the @code{NAME} equate macro. Note also the use
+of the backslash character to carry the definition onto the next line (the
+backslash can be used to escape newlines in an equate definition).
+
+An equate macro is used in a text body in the same way as a user defined
+macro, that is, by using the defined name preceeded by the @code{%%} or
+the @code{#} character sequence. The preprocessing stage will replace a
+@code{%%} sequence with a @code{#} character sequence if the name does not
+match a user defined macro. This triggers an evaluation of the equate
+definition associated with the subsequent name at that point in the text
+body, the result replacing the @code{#} and the equate macro name in the
+same way as user macros. Note that because a hash is used to identify an
+equate macro any other hash in a text body should be escaped (by using
+@code{\#} which will be substituted with @code{#}).
+
+The equate definition macro can be used to redefine previous macros. This will
+not produce any error messages. An equate macro definition can also have a
+null argument (as in user macros) in which case it is given a null definition.
+
+@node EQGUILE
+@subsubsection EQGUILE
+
+@findex EQGUILE
+@cindex Macros, GUILE equate expressions
+@cindex Defining GUILE Equate Expressions
+Works identically to @sc{equate} except that it defines an equate that is
+written in scheme to be run under the @sc{guile} interpreter. The @strong{gurgle}
+program must have been compiled with support for @sc{guile} otherwise this
+macro will be treated the same as @sc{equate}.
+
+There should be one macro argument to be the name of the equate as seen from
+the @sc{gurgle} side. This is so that the equate can be called from the @sc{gurgle}
+side as if it was any other equate. Any number of optional whitespace separated
+arguments may also be given to this macro (after the name). Any arguments
+passed to the equate from the @sc{gurgle} side will be passed to the function on
+the @sc{guile} side. No error checking is done. Argument types are converted
+in a limited sense to the @sc{guile} side equivalent. An equate defined in
+scheme is only allowed to return one argument and the @sc{gurgle} side will pick
+this up, convert the type and it can be used as normal. Only simple numbers and
+strings should be returned from the @sc{guile} side.
+
+Here is the definition of factorial as an equate written in scheme.
+
+@example
+%%EQGUILE fact n
+  (if (= n 1) 1 (* n (fact (- n 1))))
+@end example
+
+This will be wrapped up on the @sc{guile} side as shown below.
+
+@example
+(define (fact n) (if (= n 1) 1 (* n (fact (- n 1)))))
+@end example
+
+It can be called in exactly the same way as any other equate.
+
+@example
+%%EQUATE FUBAR
+  OUTPUTS(fact(4))
+%%RECORD
+Direct call: ... #fact(2) ... and then via another equate: ... #FUBAR ...
+@end example
+
+There are some additional procedures made available under the @sc{guile} side
+from the @sc{gurgle} side, see @ref{Using GUILE} for more details.
+
+@node HEADER
+@subsubsection HEADER
+
+@findex HEADER
+@cindex Macros, header text
+@cindex Header Text
+@cindex Defining, header text
+This macro defines a text body that is to be written at the very start of the
+output. The text body starts on the line following the macro and continues up
+to a line starting with a @code{%%} sequence (that is not a comment line) or
+the end of the file. A text body will have user macros fully expanded and
+equate macros substituted for evaluation later on. Note that user macros
+cannot be used at the start of a line within a text body as they will conflict
+with the predefined macros. Note also that because @code{%} is used as a macro
+identifier flag in a text body any other @code{%} should be escaped by using
+the @code{\%} sequence. This is not normally a problem since a @code{%}
+symbol has to be escaped for @emph{LaTeX} anyway. The program fragment below
+is an example of this macro. The @code{#} character should also be escaped in a
+text body in the same way as this can flag the start of an equate.
+
+@example
+%%HEADER
+\documentstyle[a4]@{article@}
+\begin@{document@}
+@end example
+
+If no @sc{header} is defined a default header is generated which is the
+name of each field in the master database file separated by the first character in the value of @strong{DELIM}. This behaviour can be stopped by creating an empty @sc{header}
+definition or by creating a @sc{record} definition (empty or otherwise).
+
+@node FOOTER
+@subsubsection FOOTER
+
+@findex FOOTER
+@cindex Macros, footer text
+@cindex Footer Text
+@cindex Defining, footer text
+This macro works in an identical way to @sc{header} except that it
+defines the text body to be written right at the very end of the output. The
+example program fragment belows shows this macro being used.
+
+@example
+%%FOOTER
+\end@{document@}
+@end example
+
+@node BANNER
+@subsubsection BANNER
+
+@findex BANNER
+@cindex Macros, banner text
+@cindex Macros, sorted group banners
+@cindex Banner Text
+@cindex Defining, banner text
+@cindex Sorting, banner text
+This macro defines a text body that is to be written at the top of each sorted
+group. Any field references within the text body will be taken from the first
+record in the sorted group. The macro can take one or more field arguments
+which defines the level at which the banners occur (for which sorted group
+with reference to the sorton list defined by the @sc{sorton}
+predefined macro). These field arguments must always correlate with the fields
+used for sorting. In the example program fragment below a banner is defined on
+the @code{YEAR} field and a header will be written out preceeding each sorted
+group of years.
+
+@example
+%%SORTON %YEAR %SURNAME
+%%BANNER %YEAR
+\flushleft@{\underline@{%YEAR@}@}
+@end example
+
+Fields given as multiple arguments to one @sc{banner} predefined
+macro will share the same text body, special equates can be used to
+distinguish which banner it is (@pxref{Predefined System Variables}),
+however, fields given to
+separate predefined macros will each have their own unique text body. The
+banners can be defined in any order as they will be matched to the sorted
+groups according to their field arguments.
+
+If an SQL query is being used that is ordered it it not neccessary to apply an
+order using @sc{sorton} to use banners. Simply define the banners with field
+arguments that correlate with those the SQL query is using as below.
+
+@example
+%%DATABASE "people.sql"
+  select * from people order by year, surname
+%%BANNER %YEAR
+\flushleft@{\underline@{%YEAR@}@}
+@end example
+
+@node PAGE01
+@subsubsection PAGE01
+
+@findex PAGE01
+@cindex Macros, first page text
+@cindex First Page Text
+@cindex Defining, first page text
+@cindex Paging, first page
+This macro defines a text body that is to be written at the start of the first
+page of the output file. The macro optionally takes one or two @emph{numeric}
+arguments which define the number of records or number of lines to be placed
+on the first page. The default without this argument is infinite (ie. there
+will be no page breaks). The program fragment below gives an example.
+
+@example
+%%PAGE01 3
+\vspace*@{1ex@}
+\centerline@{@{\bf DEPARTMENT OF ARTIFICIAL INTELLIGENCE@}@}
+\centerline@{@{\bf %%TITLE as at \today@}@}
+@end example
+
+Page breaks will only be generated if one or both of @sc{page01} and@sc{ 
+pagenn} are defined.
+
+@node PAGENN
+@subsubsection PAGENN
+
+@findex PAGENN
+@cindex Macros, page text
+@cindex Page Text
+@cindex Defining, page text
+@cindex Paging, page text
+This macro is similar to @sc{page01} except that it defines the text
+body to be written at the start of every page of the output except for the
+first page. It also optionally takes @emph{numeric} arguments defining the
+number of records or the number of lines to be put on each page excepting
+the first page. The default without this argument is infinite (ie. there will
+be no page breaks). The program fragment below is an example.
+
+@example
+%%PAGENN 4
+\vspace*@{1ex@}
+@end example
+
+Page breaks will only be generated if one or both of @sc{page01} and@sc{ 
+pagenn} are defined.
+
+@node RECORD
+@subsubsection RECORD
+
+@findex RECORD
+@cindex Macros, record text
+@cindex Record Text
+@cindex Defining, record text
+This macro defines the text body for each record. This is where references to
+fields will normally be made. References made to fields in other text bodies
+will always use the first or last records in the master database file. The record text
+body is written out for each record in the master database file (after all the sorting
+and filtering has been done). Below is an example program fragment which gives
+some idea of what a record text body field might look like.
+
+@example
+%%RECORD
+\begin@{list@}
+\item[@{\bf Name:@}] %TITLE %SURNAME,%INITS
+\item[@{\bf Start Year:@}] %YEAR
+\item[@{\bf A/C No:@}] %ACCOUNT_NO
+\item[@{\bf Balance:@}] \pounds%BALANCE
+\end@{list@}
+@end example
+
+If no @sc{record} is defined a default record is generated which is the
+contents of each field in the master database file separated by the first character in the value of @strong{ 
+DELIM}. This behaviour can be stopped by creating a @sc{record}
+definition (which could just be empty).
+
+@node BLOCK
+@subsubsection BLOCK
+
+@findex BLOCK
+@cindex Macros, user text blocks
+@cindex User Text Blocks
+@cindex Defining, user text blocks
+Defines a user placeable text body. This predefined macro should be followed by
+the name of the block (on the same line) by which it can be referred to. A user
+placeable text body can be included anywhere within another text body
+(including the text body of another block) by using the standard equate or user defined macro
+start character sequence. The example below shows a user text body block being defined and used.
+
+@example
+%%BLOCK TITLE
+This is the title
+%%RECORD
+#TITLE
+Rest of record
+@end example
+
+@node PATTERN
+@subsubsection PATTERN
+
+@findex PATTERN
+@cindex Macros, input patterns
+@cindex Patterns, defining
+@cindex Defining, user patterns
+Defines a pattern for parsing delimited text files and creating a database
+file from them. For more details
+see @ref{Redefining Patterns} on pattern definition.
+
+@node END
+@subsubsection END
+
+@findex END
+@cindex Macros, ending text blocks
+@cindex Ending Text Blocks
+The @sc{end} predefined macro can be used to terminate text bodies and is
+particularly useful at the end of these in include files, since when the
+include file is used it guarantees that the processor is back in @sc{standard} mode
+rather than relying on their being a predefined macro straight after the
+include file to do this. There is no requirement to explicitly terminate a text
+body normally as it is always followed by another predefined macro or the end
+of the file both of which terminate the text body.
+
+@node Equate Expressions, , , Top
+@section Equate Expressions
+
+@cindex Equate Expressions
+@cindex Native Language
+The equate expression language is a reasonably powerful but simple language
+designed solely for data manipulation within the @sc{grg} file. It has a very
+limited file i/o capability and no system i/o. It has conditions and loops,
+local variables, system (global) variables, support for record searching and
+matching in database files, basic maths, logical and relational operators,
+function call support (with arguments), and five interchangeable data types.
+The language is designed to supplement the text bodies, and equates can be
+called from text bodies (like user defined macros) to insert text that requires
+more complex processing to generate. They are often used to build things like
+summary tables from database files which are not so easy to generate directly
+using predefined and user defined macros.
+
+Equates are automatically converted to a @emph{reversed equate} which is a lower
+level interpreted langauge which can also be used directly if preferred
+(@pxref{Reversed Equate Expressions}).
+
+@menu
+* Predefined Equates::
+* Predefined System Variables::
+* Keywords::
+* Defining::
+* Data Types::
+* Variables::
+* Variable Assignment::
+* Field Reference::
+* Constructs::
+* Flow Control::
+* Calling Other Equates::
+* Numeric Operators::
+* Comparison Operators::
+* Boolean Operators::
+* String Operators::
+* I/O Operators::
+* Miscellaneous Operators::
+* Operator Precedence::
+* Comments::
+* Debugging::
+@end menu
+
+@node Predefined Equates
+@subsection Predefined Equates
+
+@cindex Predefined equates
+@cindex Builtin, equates
+@cindex Equates, predefined
+@cindex Equates, text body surround
+@findex eq_init
+@findex eq_args
+@findex eq_pre_header
+@findex eq_pre_footer
+@findex eq_pre_page01
+@findex eq_pre_pagenn
+@findex eq_pre_banner
+@findex eq_pre_record
+@findex eq_pre_block
+@findex eq_pre_database
+@findex eq_post_header
+@findex eq_post_footer
+@findex eq_post_page01
+@findex eq_post_pagenn
+@findex eq_post_banner
+@findex eq_post_record
+@findex eq_post_block
+@findex eq_post_database
+@findex eq_exit
+There are some equates which are pre-defined as void but whose definition can
+be overwritten by the user. These equates are called at specific points during
+generation of the output (mostly before and after text bodies) and allow
+additional processing to be carried out at these stages. For most of these
+predefined equates if a value is returned that value will be written to the
+output stream with the text body. This allows the equates surrounding text
+bodies to write values to the output without relying on a system variable
+and another equate within the text body. These equates are always called (the
+text body equates are only called if the text body itself is being written to
+the output stream) but have no affect unless redefined to something other than
+void.
+
+@itemize @bullet
+@item
+@code{eq_init} is called before any output is generated. Can be
+usefully used to enable tracing, disable the banner message, or replace the
+banner message with something else.
+@item
+@code{eq_args} is called to process each user defined command line argument.
+@item
+@code{eq_pre_header} is called before writing a header text body.
+@item
+@code{eq_pre_footer} is called before writing a footer text body.
+@item
+@code{eq_pre_page01} is called before writing a page 1 text body.
+@item
+@code{eq_pre_pagenn} is called before writing a page N text body.
+@item
+@code{eq_pre_banner} is called before writing a banner text body.
+@item
+@code{eq_pre_record} is called before writing a record text body.
+@item
+@code{eq_pre_block} is called before writing a block text body.
+@item
+@code{eq_pre_database} is called before loading a database.
+@item
+@code{eq_post_header} is called after writing a header text body.
+@item
+@code{eq_post_footer} is called after writing a footer text body.
+@item
+@code{eq_post_page01} is called after writing a page 1 text body.
+@item
+@code{eq_post_pagenn} is called after writing a page N text body.
+@item
+@code{eq_post_banner} is called after writing a banner text body.
+@item
+@code{eq_post_record} is called after writing a record text body.
+@item
+@code{eq_post_block} is called after writing a block text body.
+@item
+@code{eq_post_database} is called after loading a database.
+@item
+@code{eq_exit} is called at the very end of processing just before
+the output file is closed.
+@end itemize
+
+The exact call order of these is given in
+@ref{Processing Sequence} on the processing sequence.
+These can be redefined just like any other equate. However
+@code{eq_texinit} cannot use any database operations (since
+it is called before any databases have been loaded) or write to the output
+file (since this won't have been opened).
+
+@node Predefined System Variables
+@subsection Predefined System Variables
+
+@cindex Predefined System Variables
+@cindex System Variables
+@cindex Variables, system
+@vindex _eq_trace
+@vindex _eq_verbose
+@vindex _eq_clock
+@vindex _eq_datenow
+@vindex _eq_timenow
+@vindex _eq_banner_val
+@vindex _eq_banner_nest
+@vindex _eq_totrec
+@vindex _eq_currec
+@vindex _eq_file
+@vindex _eq_base
+@vindex _eq_extn
+@vindex _eq_outfile
+@vindex _eq_dbfpath
+@vindex _eq_dbfname
+@vindex _eq_dbftype
+@vindex _eq_block
+@vindex _eq_db_name
+@vindex _eq_db_limit
+@vindex _eq_clarg
+There are some global variables predefined as a result of parsing the @sc{grg}
+file which can be accessed from within equates. Writing new values to some of
+these predefined variables may also change the processing behaviour.
+
+@itemize @bullet
+
+@item
+@code{_eq_trace} defines whether trace output of reversed
+equate expressions is produced. Assign @code{1} to this variable to turn on the output.
+This is normally done from the @code{eq_init} equate, although it can
+be toggled on and off at will for more selective control of tracing.
+
+@item
+@code{_eq_version} defines whether the copyright banner
+message is displayed (it may be useful to remove this when the program is being
+employed as a filter in a pipe for example). The banner can be turned off by
+assigning @code{0} to this variable. This would have to be done in the
+@code{eq_init} equate to be of any use.
+
+@item
+@code{_eq_verbose} defines whether the informative message
+about what file is being created is displayed. The message can be turned off
+by assigning @code{0} to this variable. This would have to be done in the
+@code{eq_init} equate to be of any use.
+
+@item
+@code{_eq_clock} contains the number of seconds since
+1/1/1970 at the start of processing.
+
+@item
+@code{_eq_datenow} contains the current date at the start of processing
+as a @emph{date} type (ie. @emph{dBase3+} format, a string of CCYYMMDD).
+
+@item
+@code{_eq_timenow} contains the current time at the start of processing
+as a 24hr colon separated @emph{string} type including seconds (ie. HH:MM:SS).
+
+@item
+@code{_eq_banner_val} contains the value of the
+banner sort field of the current banner (the value that all the records for
+this banner group have in common).
+
+@item
+@code{_eq_banner_nest} contains the nesting level
+of the the current banner which goes from @code{1} to the number of defined banners
+and indicates which level of sort field the current banner being processed
+is associated with.
+
+@item
+@code{_eq_totrec} contains the total number of records (pre
+filtering) in the master database file.
+
+@item
+@code{_eq_currec} contains the index of the current record
+being processed. This value has a range from @code{1} to @code{_eq_totrec}.
+
+@item
+@code{_eq_file} contains the full name of the @sc{grg}
+file being processed including the path and the extension.
+The @code{_eq_ptfile} system variable which the above replaces
+is deprecated and should not be used.
+
+@item
+@code{_eq_base} contains the full name of the output file
+excluding the extension.
+The @code{_eq_texbase} system variable which the above replaces 
+is deprecated and should not be used.
+
+@item
+@code{_eq_extn} contains the extension of the output file.
+The @code{_eq_texext} system variable which the above replaces
+is deprecated and should not be used.
+
+@item
+@code{_eq_outfile} contains the full name of the output file
+including the extension. If the special case name of @code{"-"} is assigned to
+this the output file will be set to standard output. The name of the output
+file is checked before the start of processing every text body. If it has
+changed the existing file is closed and the new file is opened, output is
+then written to the new file.
+
+@item
+@code{_eq_dbfpath} contains the path component of the master
+database file name. Can be rewritten in @code{eq_init} to override the
+default.
+
+@item
+@code{_eq_dbfname} contains the name component of the master
+database file name. Can be rewritten in @code{eq_init} to override the
+default.
+
+@item
+@code{_eq_dbftype} contains the type component (extension)
+of the master database file name. Can be rewritten in @code{eq_init}
+to override the default.
+
+@item
+@code{_eq_block} contains the name of the current user
+text body block being processed (this is not set for built in
+text body blocks such as headers and footers).
+
+@item
+@code{_eq_db_name} contains the name of the database being loaded.
+
+@item
+@code{_eq_db_name} contains the size (number of records) of the database
+being loaded.
+
+@item
+@code{_eq_clarg} contains the current used defined command line argument.
+Would be used in @code{eq_args}.
+
+@end itemize
+
+There are a few other more specialised system variables which are
+discussed in the sections to which they are relevant.
+
+@node Keywords
+@subsection Keywords
+
+The following keywords are reserved in equate expressions and should not be
+used to name equates or local or global variables. Keywords are only expanded
+in the special @sc{equate} variant of @sc{text body} mode. Keywords are not
+case sensitive and can be used in lower, upper or mixed case.
+
+@example
+while, do, endwhile, roll, through, inputs,
+outputs, not, and, or, xor, if, then,
+else, endif, elseif, break, exit, read,
+write, send, exec, expand, is, into
+@end example
+
+In addition @code{wend} and @code{elif} are also reserved keywords but have
+been deprecated and should no longer be used.
+
+@node Defining
+@subsection Defining
+
+@cindex Equates, defining
+@cindex Defining equates
+Equate expressions are defined using the @sc{equate} predefined macro.
+This has one argument which is the name of the equate which can be in upper or
+lower or mixed case and is case sensitive. The first character of the equate
+name should be an underscore or an alphabetic character (A--Z or a--z), the
+remaining characters can be these as well as the numeric characters (0--9).
+There is a maximum name length (@pxref{Hard Limits}). The equate definition is given within a text
+body on the subsequent line and continues until the text body terminates.
+Only one equate definition can be within the text body so it can only include
+the definition of one function, named by the predefined macro.
+
+An equate that takes arguments can be defined by immediately following the name
+with an open bracket, comma separated list of variable names (none is allowed),
+and then a close bracket. Alternatively the @code{inputs} keyword can be used as
+described in @ref{Calling Other Equates}. Below are some
+examples of equate definitions (none of them have a
+body so none of them would do anything). The body of an equate is defined as a
+text body on the line immediately below the name/arguments definition.
+
+@example
+%%EQUATE test
+%%EQUATE substr(string,start_ndx,end_ndx)
+%%EQUATE eval()
+@end example
+
+Note that the @code{eval} equate is commonly defined and left as void to provide
+a means to process equate expressions within a text body (such as a
+header, footer or record) where the desired equate expression is simply given
+as an 
+argument in the text body and the equate itself has no affect. Note however that keywords are
+not recognised in this situation and therefore if operators are needed the
+raw reversed operator symbols must be used (@pxref{Reversed Equate Operators}).
+
+@node Data Types
+@subsection Data Types
+
+@cindex Data types
+@cindex Equates, data types
+There are six data types --- based on database field types. These are strings,
+integers, decimals, dates, booleans, and fields. A string literal is a
+sequence of characters delimited by double quotes. The double quote can be
+included in the string by using a @code{\"} sequence, and the backslash can
+be included in a string by using a @code{\\} sequence. An integer literal
+is a sequence of digits optionally starting with the minus sign. A decimal
+literal is like an integer literal but can include a decimal point. Note
+that negative number syntax is handled at the parsing stage for literals
+and so there is no unary minus operator. Date and boolean literals can only
+be created from a database field of that type. A field literal
+is the name of a field rather than its contents. It is created using the
+@code{%%} field operator. The example program fragment below shows the way
+to create each data type.
+
+@example
+"Hello World"
+12345
+0.25
+%START_DATE
+%IS_TRUE
+%%SURNAME
+@end example
+
+Note that @code{START_DATE} is a date field, getting its value with the @code{%}
+operator creates a data type of date. Similarly the @code{IS_TRUE} field is a boolean
+field.
+
+@node Variables
+@subsection Variables
+
+@cindex Equates, variables
+@cindex Variables, equate
+Variables can hold any data type. Variables can be local to the current equate
+or global to all equates. Once defined a variable can never be undefined
+(unless local where it will be undefined when the equate finishes), nor can
+the data type it was defined with be changed. The data type of a variable
+(and the variable itself) is declared when a value is written to the
+variable (the given name will be created as a new variable if it does not
+exist). A variable cannot be used until an initialising value has first been
+written to it to declare the variable and its type. Writing a different data
+type to a variable will coerce the value to the data type of the variable.
+
+@menu
+* Local Variables::
+* Global Variables::
+@end menu
+
+@node Local Variables
+@subsubsection Local Variables
+
+@cindex Variables, local
+@cindex Local variables
+@cindex Equate, local variables
+These variables are local to each equate. Variable names are unique to
+each equate. Their value can be passed to another equate only by giving them
+as arguments (this is call-by-value, there is no call-by-reference facility).
+Their value (and declaration) is lost on exiting from the equate.
+ 
+The characters A--Z and a--z can be used to start the name of a local variable
+and the rest of the variable name can include these same characters as well as
+the digits 0--9 and the underscore _ character.
+
+Care must be taken when using local variables within a text body (where they
+are part of the arguments passed to an equate) as these are created as global
+variables (but not neccessarily with the leading underscore character).
+
+@node Global Variables
+@subsubsection Global Variables
+
+@cindex Variables, global
+@cindex Global variables
+@cindex Equate, global variables
+These are almost identical to local variables, except that the name of the
+variable must start with the underscore character. This distinction in naming
+identifies the variable as global to all equates (any equate can read or write
+the value at any time, although it must always be ensured that the variable has
+been written to prior to any read from the variable takes place). System variables are simply a special
+case of global variable where the variable has already been declared with a
+value generated by parsing the @sc{grg} file.
+
+System variables maintain their type and will complain if a different data
+type from that which they were defined with is written into them (which is
+not the case for normal global variables).
+
+@node Variable Assignment
+@subsection Variable Assignment
+
+@cindex Equates, variable assignment
+@cindex Variable Assignment
+@cindex Assignment operator
+@findex >>
+A value is assigned to a variable using the assignment (@code{>>}) operator.
+This operator requires a left side which is an expression resulting in a
+value and a right side which is the name of a variable. If the variable does
+not exist it will be created and its type will be the type of the value
+resulting from the expression. If the variable already exists then its
+current value will be overwritten with the new one. If the type of the
+value resulting from the expression differs from the variable type the value
+will be coerced to the type of the variable. Some examples are shown below.
+
+@example
+"hello" >> s1
+"" >> s2
+123 >> s2
+s1 + s2 >> s3
+@end example
+
+The first line creates a string variable @code{s1} and assigns the string
+literal @code{"hello"} to it. The second line creates a string variable @code{s2}
+and assigns an empty string to it. The third line assigns the numeric literal
+@code{123} to the string variable @code{s2} thus converting it into a string.
+The fourth line concatenates the two string variables contents and assigns the
+result to a new string variable @code{s3} which has the value @code{"hello123"}.
+
+@node Field Reference
+@subsection Field Reference
+
+@cindex Equates, field reference
+@cindex Field reference
+@cindex Field value operator
+@cindex Field type operator
+@cindex Field name operator
+@cindex Field length operator
+@findex %
+@findex %%
+@findex %$
+@findex %#
+The contents of fields from a database file are retrieved in the same way as
+from within a text body using the @code{%} operator which must be immediately
+followed by the name of the field (always in upper case). A field reference is
+by default made to the current database and current record of that database.
+All the various modes of the @code{%} operator are described below. Note that
+there is no way to change the contents of a field, database files cannot be
+altered with the @code{grg} program.
+
+The @code{%} operator gets the contents of the field from the current record
+of the current database.
+
+The @code{%%} operator gets the name of the field. This is similar to but
+not identical to just quoting the field name.
+
+The @code{%#} operator gets the length of the field. This is the defined
+maximum length in characters.
+
+The @code{%$} operator gets the type of the field This is a one character
+string which will be @code{C} (character/string), @code{N} (numeric), @code{D}
+(date), @code{L} (logical), or @code{M} (memo) although this last type is not
+supported as a data type.
+
+The given field name can be more complex than a simple name to support
+referencing more that one database file and direct record indexing within that
+database file. The syntax of this is given below using the get field operator
+@code{%} as an example although any of the field operators above accept the
+same syntax variants.
+
+The @code{%field} syntax just gets the value of the @code{field} from the
+current record and is the default syntax given above.
+
+The @code{%field[index]} syntax gets the value of the @code{field} from
+the record with the given @code{index} (record indecies go from one to the number of
+records in the database).
+
+The @code{%database->field} syntax gets the value of the @code{field} from the
+current record of the given @code{database} (name should match that given when the
+database file was declared using the @sc{database} predefined macro
+without the pathname or extension).
+
+The @code{%database->field[index]} syntax gets the value of the
+@code{field} from the record with the given @code{index} of the given
+@code{database}.
+
+The @code{index} can be a simple numeric literal or any normal expression that
+returns a numeric value (which must be greater than or equal to @code{1} and
+less than or equal to the total number of records in the @code{database}). There should be no whitespace in the above syntax forms
+except where the @code{index} is a more complex expression which can include
+whitespace if neccessary.
+
+The above syntax forms all bypass any active filters. The current record forms
+when referring to a database other than the master database will always refer
+to the first record of that database.
+
+Here are some examples of field referencing from an equate.
+
+@example
+%NAME >> s1
+%CATS->NAME + %CATS->TYPE >> s2
+1 >> a
+%DOGS->NAME[2+a] >> s3
+@end example
+
+The first example gets the contents of the @code{NAME} field from the current
+record of the current database (the current database is always the master
+database unless operating under a @code{roll ... through} loop through another database). The
+second example gets the contents of the @code{NAME} and @code{TYPE} fields of the
+current record in the @code{cats} database, adds them together and assigns the
+result to the @code{s2} variable (the two fields must have the same data type).
+The last example gets the contents of the @code{NAME} field of the 3rd record in
+the @code{dogs} database and assigns the value to the @code{s3} variable.
+
+@node Constructs
+@subsection Constructs
+
+@cindex Equates, constructs
+@cindex Equates, conditionals
+@cindex Equates, loops
+@cindex Constructs
+@cindex Conditionals
+@cindex Loops
+@cindex if ... then construct
+@cindex roll ... through construct
+@cindex while ... do ... endwhile construct
+@findex if
+@findex then
+@findex else
+@findex elseif
+@findex endif
+@findex while
+@findex do
+@findex endwhile
+@findex roll
+@findex through
+There are two looping constructs and a conditional construct. The basic looping
+construct has the form @code{while ... do ... endwhile}. While the expression to the
+left of the @code{do} keyword is true do the expression to the right of the
+@code{do} keyword. The expression on the left must produce a boolean value.
+The left and right expressions can include any complex expression,
+such as nested looping and conditional constructs or function calls.
+An example of this looping construct is given below with the definition of
+@code{strlen} (to return the length of a string).
+
+@example
+%%EQUATE strlen(s)
+  0 >> x
+  while s'x <> 0 do
+    x + 1 >> x
+  endwhile
+  outputs(x)
+@end example
+
+The other looping construct has the form @code{roll ... through}. The
+expression between the keywords is executed once for every record in the
+master database (filter conditions still apply). For example here is the
+definition of a function to return the number of records in the database.
+
+@example
+%%EQUATE nrecs
+  0 >> n
+  roll n + 1 >> n through
+  outputs(n)
+@end example
+
+The looping syntax can optionally include a colon suffix form. This allows
+looping through a named database (no filter conditions apply when this is
+the master database).
+This form is @code{roll ... through:database} where @code{database} is the
+name of a valid loaded database (without the pathname or extension). Fields
+from other databases cannot be accessed within the loop unless the @code{->}
+syntax is used, so if looping through a database other than the master database
+then this form must be used within the loop to access fields of the master
+database. Note that this applies even to nested equate calls within the loop
+body for example.
+
+The conditional construct has one of the forms @code{if ... then ... endif}
+and @code{if ... then ... else ... endif}. If the boolean expression bewteen
+the @code{if} and @code{then} keywords is true execute the expression between
+the @code{then} and @code{else} or @code{endif} keywords otherwise execute the
+expression between the @code{else} and the @code{endif} keywords if it exists.
+Each expression can be as complex as required (including nested conditional
+and looping constructs, and function calls) but need not have any contents.
+Below are two examples of the conditional construct.
+
+@example
+%%EQUATE test
+  inputs(a,c)
+  if a > 0 and a < 12 then "hello" >> b endif
+  if not (c = 5) then
+    5 >> c
+    "no" >> b
+  else
+    if not (c = 3) then 3 >> c "world" >> b
+    endif
+  endif
+  outputs(b,c)
+@end example
+
+Note that the @code{endif} keyword must always be present. The @code{elseif}
+keyword can be used for multiple conditions grouped up under one @code{endif}
+keyword (this saves having to nest conditions). The example above is shown
+below using the @code{elseif} keyword to simplify the statements.
+
+@example
+%%EQUATE test
+  inputs(a,c)
+  if a > 0 and a < 12 then "hello" >> b endif
+  if not (c = 5) then 5 >> c "no" >> b
+  elseif not (c = 3) then 3 >> c "world" >> b
+  endif
+  outputs(b,c)
+@end example
+
+@node Flow Control
+@subsection Flow Control
+
+@cindex Equates, flow control
+@cindex Flow control
+@cindex Break operator
+@cindex Exit operator
+@findex break
+@findex exit
+The following two keywords may occasionlly be needed. The @code{break} keyword
+can normally be simulated in other ways but is useful in record loops.
+Its function is to break
+one level back. Normally it is used within the body of a loop to break out of
+the loop on certain conditions (as an addition to the standard loop condition
+in @code{while ... do ... endwhile} loops). The @code{exit} keyword exits the entire equate expression all
+the way back to where it was initially called from within a text body or in a
+filter condition. The example below searches all the records in the @code{names}
+database
+for a matching value and returns the record number of the first record the
+field matched.
+
+@example
+%%EQUATE FIND
+  1 >> n
+  roll
+    if %NAME = "Smith" then break
+    else ++n >> n
+    endif
+  through:names
+  outputs(n)
+@end example
+
+@node Calling Other Equates
+@subsection Calling Other Equates
+
+@cindex Equates, calling other equates
+@cindex Equates, inputs
+@cindex Equates, outputs
+@cindex Calling other equates
+@cindex Call mechanism
+@cindex Equate call operator
+@findex #
+@findex inputs
+@findex outputs
+Any equate can be called from within an equate. It can be passed
+arguments and any value returned can be assigned to a variable or
+used in an expression. An equate is called by simply
+giving its name (with optional brackets). If the equate matches the name of a
+local variable then the value of the variable will be returned else the equate
+will be called to return a value. An equate need not take any arguments nor
+return any value although they commonly do. Arguments are passed to an equate
+as a comma separated list of expressions between brackets that immediately
+follow the equate name. If the equate returns one argument this can be simply
+assigned to a variable, or used in an expression. If the equate returns
+multiple arguments then the @code{@@(...)} operator sequence should be used to
+assign the results to multiple variables. Some examples of equate calls are
+shown below.
+
+@example
+%%EQUATE test
+  "hello" >> s
+  "b" + substr(s,1,1+3) + "ws" >> s
+@end example
+
+Using the previously defined equate @code{substr()} the above would result in
+@code{"bellows"} being assigned to @code{s}.
+
+Arguments to an equate are defined using the @code{inputs(...)} keyword
+sequence. Between the brackets there can be nothing or there should be a comma
+separated list of variable names to which the arguments passed into the equate
+will be assigned (the variables will be created with the data type of the
+argument passed in). Instead of using the @code{inputs} keyword it is also
+possible to put the bracket sequence immediately following the definition
+of the equate name. The return values from an equate are similarly defined
+using the @code{outputs(...)} keyword sequence. This takes a comma separated
+list of expressions (normally just one) the values of which are returned to the
+calling equate. Both the @code{inputs} and @code{outputs} keyword sequences are
+optional but if they are used the @code{inputs} must be the first line of
+the equate and the @code{outputs} must be the last line of the equate (or at
+least the last executed expression) - the @code{outputs} keyword cannot be used
+as a return escape. The example below shows the definition of an equate that
+takes two arguments and swaps the values around while also adding 10 to each
+value returning the two swapped arguments and then an example of that equate
+being called.
+
+@example
+%%EQUATE swap
+  inputs(a,b)
+  outputs(b+10,a+10)
+%%EQUATE test
+  5 >> x
+  7 >> y
+  swap(x,y)@@(x,y)
+@end example
+
+The @code{test} equate will result in @code{x} equaling 17 and @code{y} equaling
+15. Note the use of the @code{@@ } operator to handle the passing back of multiple
+arguments. Note that @code{swap(x,y) >> y >> x} would be equivalent to the above
+but the assignments must be put in reverse order to the arguments sent back.
+
+@node Numeric Operators
+@subsection Numeric Operators
+
+@cindex Equates, numeric operators
+@cindex Numeric operators
+@cindex Mathematical operators
+@findex + (add numeric)
+@findex - (subtract)
+@findex / (divide)
+@findex * (multiply)
+@findex ++ (increment)
+@findex -- (decrement)
+@cindex Increment
+@cindex Decrement
+These operators are fairly self explanatory. The @code{+}, @code{-}, @code{/},
+and @code{*} operators respectively add, subtract, multiply, and divide two
+values. The @code{++} and @code{--} unary operators respectively add and
+subtract one to their operand (they don't modify the operand in place like
+C, so @code{++a} is invalid, use @code{++a >> a} instead). They can only be
+used
+with numeric operands, with the exception of @code{+} which can also be used
+with string operands. The @code{+}, @code{++}, @code{-}, and @code{--} operators
+can also be used with date operands, where they add or subtract days (or add
+or subtract two dates).
+
+@node Comparison Operators
+@subsection Comparison Operators
+
+@cindex Equates, comparison operators
+@cindex Comparison operators 
+@findex > (greater than)
+@findex < (less than)
+@findex >= (greater than or equals)
+@findex <= (less than or equals)
+@findex = (equals)
+@findex <> (not equals)
+These comprise the following: @code{>}, greater than; @code{<}, less than;
+@code{>=}, greater than or equals; @code{<=}, less than or equals; @code{=},
+equals; @code{<>} not equals. These perform the respective comparison and
+produce a boolean data type of true or false. Can be used with numeric,
+string and date operands. The boolean data type is interchangeable with
+the numeric data type, but in general can only subsequently be used by
+the boolean operators or the conditional operator.
+
+@node Boolean Operators
+@subsection Boolean Operators
+
+@cindex Equates, boolean operators
+@cindex Boolean operators
+@cindex Logical operators
+@findex and
+@findex or
+@findex xor
+@cindex Equates, bitwise operators
+@cindex Bitwise operators
+@findex & (bitwise and)
+@findex | (bitwise or)
+@findex ^ (bitwise xor)
+@findex ~ (bitwise ones complement)
+These perform logical operations on the boolean data type or bitwise
+operations on the numeric data type, but are generally interchangeable. The
+operator keywords @code{and}, @code{or}, and @code{xor} will logically AND, OR,
+and exclusive OR their arguments respectively. The @code{not} keyword operator
+wll logically negate its argument.
+
+The operators @code{&}, @code{|}, and @code{^} bitwise and, or, and
+exclusive or their arguments respectively. The @code{~} operator performs a
+ones complement on its argument.
+
+@node String Operators
+@subsection String Operators
+
+@cindex Equates, string operators
+@cindex String operators
+@findex + (string concatenate)
+@findex ' (string index get)
+@findex ` (string index put)
+The @code{+} operator and all the comparison operators also work on strings.
+The @code{+} operator concatenates two string arguments together, whereas
+the comparison operators will compare strings character by character. A
+string is less than another if it is earlier in ascii dictionary order and is
+greater than another if it is later in ascii dictionary order.
+
+The index operators @code{'} and @code{`} are more complex. The @code{'} takes two
+arguments, a string to index and a numeric index position. The result is the
+numeric value of the character in the string at the index position. The index
+can not go beyond the end of the string. The @code{`} operator is the reverse.
+It takes three arguments, the additonal one being the numeric value to write
+into the string at the given index position. Below is the definition of
+@code{substr} as an example of how these operators are used.
+
+@example
+%%EQUATE substr(s1,s,e)
+  "" >> s2
+  0 >> x
+  while s <= e do
+    s2,(s1's)`x >> s2
+    s + 1 >> s
+    x + 1 >> x
+  endwhile
+  outputs(s2,0`x)
+@end example
+
+The function takes three arguments, the string to produce a substring of, the
+start index and end index for the string. It pushes the resultant substring.
+
+@node I/O Operators
+@subsection I/O Operators
+
+@cindex Equates, i/o operators
+@cindex Input Operators
+@cindex Output Operators
+@cindex I/O operators
+@findex write
+@findex send
+@findex read
+The @code{write} keyword writes its operand on the standard output. This can
+be useful for debugging or displaying progress information. The @code{write}
+keyword acts as a expression terminator (like the assignment operator) and
+so must always appear at the end of an expression.
+
+The @code{read} keyword reads from the standard input characters up to a
+newline, returning the string entered (including the newline character).
+The maximum number of characters that can be read is @sc{strmax}. Since
+it returns a value it can be used anywhere in an expression.
+
+The @code{send} keyword will write its operand to the output file stream
+(as opposed to @code{write} which sends its output to standard output). This
+is useful for writing larger blocks of text generated from equates that
+cannot be written into the output file in the ordinary way (by returning
+the value). Like the @code{write} keyword it acts as an expression terminator.
+
+Here is an example of the read, write and send operators.
+
+@example
+%%EQUATE feedback
+  read >> s
+  "Input: " + s write
+  s send
+@end example
+
+@node Miscellaneous Operators
+@subsection Miscellaneous Operators
+
+@cindex Equates, miscellaneous operators
+@cindex Miscallaneous operators
+@cindex Executing equate strings
+@cindex Expanding block strings
+@findex exec
+@findex expand
+@cindex Arrays
+The @code{exec} keyword or @code{$} operator is very useful. It equates its
+operand. So, for example, a string containing a valid equate expression
+could be given as an argument to this operator which would then execute
+the string as an equate returning any value resulting. For example, here
+is a definition of @code{strlen} (called @code{gstrlen}) for any database field.
+
+@example
+%%EQUATE gstrlen
+  inputs(str)
+  outputs(strlen(exec(str)))
+@end example
+
+The function might be called with @code{gstrlen(%%NAME)}. Note that the
+@code{%%} operator is used to put the field name on the stack. Then within
+the function the @code{$} operator is used to evaluate the argument as
+an equate expression, thus getting the contents of the field.
+
+There is no dynamic array support in equate expressions currently, but a
+simplified mechanism can be written using the @code{exec} operator to create
+named variables with a numeric index to simulate this. The size of an array
+would be limited to a few hundred elements (or less, depending on how much
+local variable space is available on the stack). The example below
+defines@code{ 
+aget} to get the contents of an array element and @code{aput} to assign a value
+to an array element and @code{example} to show the equates being used. The
+definitions below use global variables and work only with string values.
+
+@example
+%%EQUATE aget(name,index)
+  "" >> index_str
+  index >> index_str
+  exec("_"+name+index_str)
+%%EQUATE aset(name,index,value)
+  "" >> index_str
+  index >> index_str
+  exec(value+">>_"+name+index_str)
+%%EQUATE example
+  /* create 5 element array, each element is set to "hello" */
+  0 >> i
+  while i < 5 do aset("ex",i,"hello") ++i >> i endwhile
+  /* read back contents of array, send to stdout */
+  0 >> i
+  while i < 5 do aget("ex",i) write ++i >> i endwhile
+@end example
+
+The @code{expand} keyword or @code{$$} operator expands its operand as
+a text body. So, for example, a string containing the contents of a text
+body (including embedded equate and field references) can be given as
+an argument to this operator which will expand it (calling any embedded
+equates and substituting their value as necessary) and return the result
+as a string.
+
+@example
+%%equate doblock
+  "This string is #strlen(s) characters long" >> s
+  outputs(expand(s))
+@end example
+
+@node Operator Precedence
+@subsection Operator Precedence
+
+@cindex Equates, operator precedence
+@cindex Operator Precedence
+@cindex Brackets
+In most cases the default precedences of the operators will be correct, however
+in any case where they are not (such as some mathematical and relational
+expressions) then
+bracket pairs can be used to enforce a certain ordering. Pairs of brackets can
+be used in other circumstances to increase legibility (such as surrounding the
+condition part of an @code{if .. then} or @code{while ... do} statement). Some
+examples are shown below.
+
+@example
+%%EQUATE example
+  /* default precedence below would
+  be a + (b * c) + d */
+  (a + b) * (c + d) >> x
+  /* brackets add clarity below and also
+    affect the conditon which would be
+    (not a) and b by default */
+  if (not (a and b)) then 1 >> c endif
+  /* brackets just add clarity below */
+  while ( a > 5 ) do --a >> a endwhile
+@end example
+
+The full operator precedence table from lowest to highest is included below.
+
+@example
+or
+xor
+and
+|
+^
+&
+= <>
+< <= > >=
++ -
+* /
+++ --
+not ~
++ - (unary) ' ` ! @ \$ \$\$
+@end example
+
+@node Comments
+@subsection Comments
+
+@cindex Equates, comments
+@cindex Comments, equates
+@findex /* .. */ (comments)
+You can include comments anywhere in an equate expression by enclosing them
+in @code{/*} and @code{*/} brackets. Nested comments are allowed. A comment may
+extend over a line without the newline being escaped.
+
+@node Debugging
+@subsection Debugging
+
+@cindex Equates, debugging
+@cindex Debugging equates
+@cindex Tracing
+@cindex Equates, tracing
+The best thing to do is to start up the tracer. This will dump to standard
+output precisely what is happening. This is however done at the level of
+reversed equate expressions (@pxref{Reversed Equate Expressions}) as there is no symbolic debugger.
+You can also use the @code{write} keyword to print information onto standard
+output. You can turn on the tracer by assigning @code{1} to the @code{_eq_trace} system variable,
+ie. @code{1 >> _eq_trace}. The tracer can be
+turned off by assigning @code{0} in the same way.
+Control of this variable allows tracing to be turned on
+and off at selected points during equate processing so that the
+particular problem area can be focused on.
+
+@node Reversed Equate Expressions, , , Top
+@section Reversed Equate Expressions
+
+The reversed equate expression language is a postfix (reverse polish) notation
+(read cryptic but efficient in terms of space and speed) language. It is rather
+@sc{forth} like in its appearance. The normal equate expressions are tokenised
+and converted into this language for processing. However an equate can be
+defined directly in this langauge if preferred (it is retained for
+compatibility since it used to be all there was). An understanding of this
+language can be useful for debugging purposes as this is what any trace output
+will currently show. However for most users there should be no need to know
+anything about this (except perhaps if defining equate based filter expressions
+or patterns which currently require reversed equates) so you can skip to the
+next part (@ref{Hard Limits}).
+
+All operators are single or double character combinations. Five interchangeable data types
+are supported. The language is stack based but in addition global variables,
+local variables, and system variables are available. Most operators accept an
+immediately following
+variable operand instead of one stack operand. Looping and conditional
+structures can also be used - as well as a function call mechanism. All in all
+there are a total of about 34 unique operators, some of which have multiple
+functions dependent on the data types of their operands.
+
+Due to the large number of operators some have become ambiguous and it is
+reccommended that separators are used almost exclusively between them, the
+most obvious separator being whitespace. Note that some combinations need
+special attention, for example
+@code{~~=} which has a different meaning from
+@code{=~~}.
+
+@menu
+* Defining Reversed Equates::
+* The Stack::
+* Reversed Equate Data Types::
+* Reversed Equate Variables::
+* Reversed Equate Operators::
+@end menu
+
+@node Defining Reversed Equates
+@subsection Defining Reversed Equates
+
+Reversed equate expressions are defined using the @sc{equate}
+predefined macro. This takes two arguments separated by whitespace. The first is
+the name of the equate which can be in upper or lower or mixed case and is case
+sensitive. The first character of the equate name should be an underscore or an
+alphabetic character (A--Z or a--z), the remaining characters can be these as
+well as the numeric characters (0--9). There is a maximum name length (see
+@ref{Hard Limits} on hard limits). The
+second argument is the definition of the equate which must be on one line only.
+The backslash character can be used to escape the newline and allow the equate
+definition to be formatted over multiple lines.
+
+@node The Stack
+@subsection The Stack
+
+The stack is where everything happens. Arguments to operators are pushed onto
+the stack, the operator takes these values off the stack, produces the result
+and pushes it back on the stack. Most operators will optionally take a operand
+immediately following as a variable name, and use this for one of their
+arguments instead of the stack. Most operators are binary, although a few are
+unary, and there is one tertiary operator. As an example of the stack the
+fragment below shows four different ways to add 1 to a number (using the binary
+plus operator and the unary increment operator).
+
+@example
+1 <<X + >>X
+1 +X >>X
+<<X ++ >>X
+++X >>X
+@end example
+
+The first example pushes the numeric literal @code{1} on the stack, followed by
+the value of the @code{X} variable. Then the @code{+} operator takes both of these
+values off the stack, adds them and pushes the result back on the stack. Then
+the value is taken off the stack and written back into @code{X}. The second
+example behaves identically except that the form of the operator @code{+X} means
+that the left argument to add is read from the variable @code{X} and not from
+the stack. Note that the result is still put on the stack though. The last two
+examples use the increment operator instead.
+
+@node Reversed Equate Data Types
+@subsection Reversed Equate Data Types
+
+There are five data types - based on database field types. These are strings,
+numbers, dates, booleans, and fields. A string literal is a sequence of
+characters delimited by double quotes. The double quote can be included in the
+string by using a @code{\"} sequence, and the backslash can be included in a
+string by using a @code{\\} sequence. A numeric literal  is a sequence of
+digits optionally starting with the unary minus operator. Decimal numbers are
+also supported (ie. include a decimal point) and will be stored as the
+EQ_DEC type. Note that negative number syntax is handled at the parsing
+stage for literals and so there is no unary minus operator.
+Date and boolean literals can only be created if there is
+a database field of that type to use. A field literal is the name of a field
+rather than its contents. It is created using the @code{%%} operator. The
+example fragment below shows the way to create each data type (as an argument
+that gets pushed onto the stack).
+
+@example
+"Hello World"
+12345
+0.25
+%START_DATE
+%IS_TRUE
+%%SURNAME
+@end example
+
+@node Reversed Equate Variables
+@subsection Reversed Equate Variables
+
+Variables can be used to permanently store information that would otherwise be
+lost on the stack. They can hold any data type. Variables can be local to the
+current equate or global to all equates. Once defined a variable can never be
+undefined (unless local where it will be undefined when the equate finishes),
+nor can the data type it was defined with be changed. The data type of a
+variable (and the variable itself) is declared when a value is written to the
+variable (the given name will be created as a new variable if it does not
+exist). A variable cannot be used until an initialising value has first been
+written to it to declare the variable and its type. Writing a different data
+type to a variable will coerce the value to the data type of the variable.
+
+@menu
+* Reversed Equate Local Variables::
+* Reversed Equate Global Variables::
+@end menu
+
+@node Reversed Equate Local Variables
+@subsubsection Reversed Equate Local Variables
+
+These variables are local to the each equate. Variable names are unique to
+each equate. Their value can be passed to another equate only by giving them
+as arguments (this is call-by-value, there is no call-by-reference facility).
+Their value is lost on the equate returning. Local variables are held on the
+equate stack but build in the opposite direction to that used for general
+equate processing.
+ 
+The characters A--Z and a--z can be used to start the name of a local variable
+and the rest of the variable name can include these same characters as well as
+the digits 0--9 and the underscore _.
+
+Care must be taken when using local variables within a text body (where they
+are part of the arguments passed to an equate) as these are created as global
+variables (but without the underscore character).
+
+@node Reversed Equate Global Variables
+@subsubsection Reversed Equate Global Variables
+
+These are almost identical to local variables, except that the name of the
+variable must start with the underscore character. This distinction in naming
+identifies the variable as global to all equates (any equate can read or write
+the value at any time, although it must always be ensured that the variable is
+written to before any read takes place). System variables are simply a special
+case of global variable where the variable has already been declared with a
+value generated by parsing the @sc{grg} file.
+
+System variables maintain their type and will complain if a different data
+type from that which they were defined with is written into them.
+
+The system variable whose name is the underscore character alone represents
+the system stack pointer. So doing @code{0>>_} for example would clear
+the stack.
+
+@node Reversed Equate Operators
+@subsection Reversed Equate Operators
+
+This section gives a brief description, usage, and example of each operator.
+
+@menu
+* Reversed Equate Variable Operators::
+* Reversed Equate Numeric Operators::
+* Reversed Equate Comparison Operators::
+* Reversed Equate Boolean Operators::
+* Reversed Equate String Operators::
+* Reversed Equate Stack Operators::
+* Reversed Equate Field Operators::
+* Reversed Equate Calling Mechanism::
+* Reversed Equate I/O Operators::
+* Reversed Equate Miscellaneous Operators::
+* Reversed Equate Constructs::
+* Reversed Equate Flow Control::
+* Reversed Equate Comments::
+* Reversed Equate Debugging::
+@end menu
+
+@node Reversed Equate Variable Operators
+@subsubsection Reversed Equate Variable Operators
+
+The @code{>>} and @code{<<} operators are used to write a value to a variable
+and read a value from a variable respectively. Both operators must be followed
+by a variable name, although it can be of any type. The @code{>>} operator pops
+a value off the stack and assigns it to the designated variable - the variable
+will be created if neccessary. If so, then it will be created with the type of
+the value popped off the stack. If the variable already exists then its current
+value will be overwritten with the new one. However, if the type of the value
+popped off the stack differs from the variable type it will be cast to the
+same type as the variable. The @code{<<} operator takes the value of the
+designated variable and pushes it on the stack. The type of the stack argument
+will be the type of the variable. There is an error if the variable has not
+been defined. There are some examples below.
+
+@example
+"hello" >>S
+<<S 123 >>S <<S + .
+@end example
+
+The first example creates a string variable @code{S} and assigns the string
+literal @code{"hello"} to it. The second pushes the contents of @code{S} back
+on the stack and then assigns the numeric literal @code{123} to the string
+variable @code{S} thus converting it into a string. This is then pushed onto
+the stack and the two strings are concatenated and the result printed, which
+will be the string literal @code{"hello123"}.
+
+It is not actually necessary to use the @code{<<} operator as any variable name
+will be looked up first as an equate call and if it is not an equate call then
+as a variable reference. The @code{<<} operator can be used where there is a
+name clash for example.
+
+@node Reversed Equate Numeric Operators
+@subsubsection Reversed Equate Numeric Operators
+
+These operators are fairly self explanatory. The @code{+}, @code{-}, @code{/},
+and @code{*} operators respectively add, subtract, multiply, and divide two
+stack values and push the result on the stack. The @code{++} and @code{--}
+operators respectively add and subtract one to their operand. All these
+operators can take a variable designator to replace one of their stack
+operands. They can only be used with numeric operands, with the exception of
+@code{+} which can be used with any operand
+(@pxref{Reversed Equate String Operators}). The @code{+}, @code{++}, @code{-}, and
+@code{--} operators can also be applied to dates, where they add or
+subtract days appropriately (or add or subtract two dates).
+
+@node Reversed Equate Comparison Operators
+@subsubsection Reversed Equate Comparison Operators
+
+These comprise the following: @code{>}, greater than; @code{<}, less than;
+@code{>=}, greater than or equals; @code{<=}, less than or equals; @code{=},
+equals; @code{<>} not equals. These take two stack operands (or one stack
+operand and a variable designator) perform the respective comparison and
+push a boolean data type of true or false on the stack dependent on the
+result. They can be used with numeric or string operands
+(@pxref{Reversed Equate String Operators}). The boolean data type is interchangeable
+with the numeric data type, but in
+general can only subsequently be used by the boolean operators or the
+conditional operator. All these operands can also be used to compare date
+types, taking account of the format of a date.
+
+@node Reversed Equate Boolean Operators
+@subsubsection Reversed Equate Boolean Operators
+
+These perform logical operations on the boolean data type or bitwise
+operations on the numeric data type, but are generally interchangeable. The
+operators @code{&&}, @code{||}, and @code{^^} will logically and, or, and
+exclusive or their arguments respectively. The @code{~~} operator logically
+negates its argument. All these operators take two boolean stack arguments
+(or one and a variable designator) and push a boolean result, except the
+negation operator which is unary. The operators
+@code{&}, @code{|}, and @code{^} bitwise and, or, and exclusive or their
+arguments respectively. The @code{~} operator performs a ones complement on
+its argument. All these operators take two numeric stack arguments (except
+the ones complement operator) or one stack argument and a variable designator
+and push a numeric result.
+
+@node Reversed Equate String Operators
+@subsubsection Reversed Equate String Operators
+
+The @code{+} operator and all the comparison operators also work on strings.
+The @code{+} operator concatenates two string argumennts together, whereas
+the comparison operators will compare strings character by character. A
+string is less than another if it is earlier in ascii dictionary order and is
+greater than another if it is later in ascii dictionary order. The index
+operators @code{'} and @code{`} are more complex. The @code{'} takes two
+arguments, a string to index (which can be on the stack or taken from a
+variable) and a numeric index position. The result pushed is the numeric value
+of the character in the string at the index position. The index cannot go beyond
+the end of the string. The @code{`} operator is the reverse. It takes three
+arguments, the additonal one being the numeric value to write into the string
+at the given index position. Below is the definition of @code{substr} as an
+example of how these operators are used.
+
+@example
+%%EQUATE SUBSTR      >>E>>S>>S1"">>S2\0>>X\
+	[<<S<<E<=;<<S'S1\<<X`S2>>S2++S>>S++X>>X]\
+	0<<X`S2
+@end example
+
+The function takes three arguments, the string to produce a substring of, the
+start index and end index for the string. It pushes the resultant substring.
+
+@node Reversed Equate Stack Operators
+@subsubsection Reversed Equate Stack Operators
+
+The @code{@@ } operator duplicates the value at the top of the stack. The @code{!}
+operator removes the value at the top of the stack. Both operators don't care
+what data type they are using. The @code{@@ } operator can take a variable
+designator instead - in which case it pushes the variables value twice.
+
+@node Reversed Equate Field Operators
+@subsubsection Reversed Equate Field Operators
+
+All field operators must be immediately followed by the name of the field to
+which they are referring (always in upper case).
+
+The @code{%} operator pushes the contents of the designated field name from the
+current record onto the stack.
+
+The @code{%%} operator pushes the name of the given field on the stack. This is
+similar to but not identical to quoting the field name.
+
+The @code{%#} operator pushes the length of the given field name on the
+stack. This is the defined maximum length in characters of the given field.
+
+The @code{%$} operator pushes the type of the given field name on the stack.
+This is a one character string which is the type of the given field, this
+will be @code{C} (character/string), @code{N} (numeric), @code{D} (date),
+@code{L}
+(logical), or @code{M} (memo) although this last type is not supported.
+
+The given field name can be more complex than a simple name to support
+referencing more that one database file and direct record indexing within that
+database file. The syntax of this is given below using the get field operator
+@code{%} as an example although any of the field operators above accept the
+same syntax variants.
+
+The @code{%field} syntax just gets the value of the @code{field} from the
+current record and is the default syntax given above.
+
+The @code{%field[index]} syntax gets the value of the @code{field} from
+the record with the given @code{index} (record indecies go from one to the number of
+records in the database).
+
+The @code{%database->field} syntax gets the value of the @code{field} from the
+current record of the given @code{database} (name should match that given when the
+database file was declared using the @sc{database} predefined macro
+without the pathname or extension).
+
+The @code{%database->field[index]} syntax gets the value of the
+@code{field} from the record with the given @code{index} of the given
+@code{database}.
+
+The @code{index} can be a simple numeric literal or any normal equate processing that
+returns a numeric value. There should be no whitespace in the above syntax forms
+except where the @code{index} value is a more complex equate which can include
+whitespace if neccessary.
+
+The above syntax forms all bypass any active filters. The current record
+variants, when referring to a database other than the master database,
+will always refer to the first record of that database.
+
+@node Reversed Equate Calling Mechanism
+@subsubsection Reversed Equate Calling Mechanism
+
+The @code{#} operator is immediately followed by the name of an equate. It
+results in a call to that equate. Arguments can be passed by pushing values
+on the stack before calling the function, and any results can be left on the
+stack before returning where they can subsequently be popped off. The equate 
+need not be defined before it is called.
+
+It is not actually necessary to use the @code{#} operator as any variable name
+will be looked up first as an equate call and if it is not an equate call then
+as a variable reference. The @code{#} operator is still required to flag an
+equate call from within a text body so it is retained for compatibility.
+
+Equate calls can be given arguments as comma separated items between
+brackets. Each item must leave a value on the stack. This is identical to
+just pushing arguments on the stack before calling the function, but is
+clearer, and makes the separation of each argument more obvious. It also
+has the advantage that the brackets surround effectively any equate and the
+same syntax can be used in text bodies (to pass field arguments for example).
+This can be a useful way of doing some equate processing within the text body
+itself before calling the function. Note that user defined macros will be
+expanded within a text body even if within the equate function call. A
+function can be called with no arguments like @code{f()} if preferred. The
+comma separator is not neccessary, any separator can be used (or even none).
+For example, the call @code{substr(1,3,"hello")} is functionally identical to
+@code{1 3 "hello" substr}, or @code{substr(1 3 "hello")}, or even
+@code{1/3"hello"#substr()} but is much nicer and will work identically in a
+text body. Also @code{%%substr(1,3,%%str)} will have the user defined macro
+@code{str} expanded before the equate is called.
+
+Since @code{%%} will be treated as a user defined macro or equate
+within a text body the field name operand cannot be used within an equate
+function call argument, for example,
+@code{%%substr(1,1,%%field_name)} will not work, the processor will
+interpret @code{%%field_name} as a user defined macro or equate. Since
+this can be a useful way to make general functions the trick is to quote the
+field name instead, ie. @code{%%substr(1,1,"%field_name")} will work.
+This is slightly different because the data type will end up as EQ_STR
+rather than EQ_FLD as in the previous equate, but this is usually not
+a problem.
+
+@node Reversed Equate I/O Operators
+@subsubsection Reversed Equate I/O Operators
+
+The @code{.} (or @code{.<}) operator writes on the standard output the operand
+from the stack or variable designator as a string. This can be useful for
+debugging or displaying progress information.
+
+The @code{@code{.>}} operator reads from the standard input characters up to a
+newline, returning the string entered (including the newline character).
+The maximum number of characters that can be read is @sc{strmax}.
+
+The @code{..} operator will send output to the output file stream (as opposed
+to @code{.} which sends its output to standard output). This is useful for
+writing larger blocks of text generated from equates that cannot be written
+into the output file in the ordinary way (by returning the value on the stack).
+
+All of these operators can take a local or system variable argument.
+
+@node Reversed Equate Miscellaneous Operators
+@subsubsection Reversed Equate Miscellaneous Operators
+
+The @code{$} operator is very useful. It equates the contents of the top
+of the stack (or variable designator). So, for example, a string could be
+pushed as an argument to a function, and within that function this operator
+could be used to equate the argument. For example, here is a definition of
+@code{strlen} for any database field.
+
+@example
+%%EQUATE STRLEN $>>Y 0>>X [<<Y<<X'0=~~;++X>>X]<<X
+@end example
+
+The function might be called with @code{%%NAME#STRLEN}. Note that the @code{%%}
+operator is used to put the field name on the stack. Then within the function
+the @code{$} operator is used to evaluate the stack argument as an equate
+expression, thus getting the contents of the field.
+
+The @code{$$} operator expands its argument as a text body.
+
+The @code{\} is the null operator. It does nothing, but is useful for
+separating operands or for escaping a newline character.
+
+@node Reversed Equate Constructs
+@subsubsection Reversed Equate Constructs
+
+There are two looping constructs and a conditional construct. The basic looping
+construct has the form @code{[...;...]}, either side of the semicolon may be
+null. While the equate expression to the left of the semicolon is true do the
+equate expression to the right of the semicolon. The expression on the left
+must leave a boolean value on the stack. An example of this looping construct
+was given earlier for the definition of @code{strlen}. The left and right
+expressions can include anything, such as nested looping and conditional
+constructs or function calls.
+
+The other looping construct has the form @code{(...)}. The expression between
+the brackets is executed once for every record in the database. For example
+here is the definition of a function to return the number of records in the
+master database.
+
+@example
+%%EQUATE NRECS 0>>NRECS(++NRECS>>NRECS)<<NRECS
+@end example
+
+The looping syntax can optionally include a colon suffix form. This allows
+looping through a named database (if this is the master database then any
+filtering conditions will be ignored).
+This form is @code{():database} where @code{database} is the name of
+a valid loaded database (without the pathname or extension). Fields from other
+databases cannot be accessed within the loop unless the @code{->} syntax is
+used, so if looping through a database other than the master database then
+this form must be used within the loop to access fields of the master database.
+Note that this applies even to nested equate calls within the loop body for
+example.
+
+The conditional construct has the form @code{?...:...;}. This can take a field
+name designator, in which case the behaviour is slightly different. The
+action is to pop a boolean off the stack and if it is true to execute the
+equate expression up to the colon, and if not to execute the equate expression
+from the colon up to the semicolon. Each expression can be as complex as
+required (including nested conditional and looping constructs, and function
+calls) but need not have any contents. If the @code{?} is immediately followed
+by a field name and the colon and semicolon fields are null, then if the
+contents of the field are empty the result is null, else the result is the
+contents of the field. Below are two examples  of the conditional construct.
+
+@example
+%%EQUATE SUBDATE1 ?SUB_DATE:"In preparation";
+%%EQUATE SUBDATE2 %SUB_DATE""=?"In preparation":%SUB_DATE;
+@end example
+
+Both the above conditions have the same action. If the @code{%SUBDATE} field
+has a value push the value on the stack, else push the default string on the
+stack.
+
+@node Reversed Equate Flow Control
+@subsubsection Reversed Equate Flow Control
+
+The following two operators may occasionlly be needed. The @code{\b} operator
+can be simulated in other ways but is useful to have. Its function is to break
+one level back. Normally it is used within the body of a loop to break out of
+the loop on certain conditions (as an addition to the standard loop condition
+in while loops). The @code{\e} operator exits the entire equate expression all
+the way back to where it was initially called from within a text body or in a
+filter evaluation. Neither of these operators will alter the stack. For example,
+the fragment below searches all the records for a matching field and returns
+the record number of the record the field matched.
+
+@example
+%%EQUATE FIND 1>>N(%NAME"Smith"=?\b:++N>>N;)<<N
+@end example
+
+@node Reversed Equate Comments
+@subsubsection Reversed Equate Comments
+
+You can include comments anywhere in an equate expression by enclosing them
+in @code{@{} and @code{@}} brackets. Nested comments are allowed. A comment may
+extend over a line without the newline being escaped.
+
+This comment style is deprecated and no comments should be used within a
+reversed equate expression definition (comments can be placed before the
+definition if required using the @code{%%} sequence).
+
+@node Reversed Equate Debugging
+@subsubsection Reversed Equate Debugging
+
+The best thing to do is to start up the stack and operator tracer. This will
+dump to standard output precisely what is happening. You can also use the
+@code{.} operator to print information onto standard output. You can turn on
+the tracer by writing @code{1} to the @code{_eq_trace} system variable,
+ie. @code{1>>_eq_trace}. The tracer can be turned off by
+writing @code{0} in the same way. Control of this variable
+allows tracing to be turned on and off at selected points during processing.
+
+@node Hard Limits, , , Top
+@section Hard Limits
+
+@cindex Limits
+@cindex Hard limits
+@cindex Size limits
+The @code{gurgle} program internally limits the size of some data structures. These
+are listed here with their default maximum sizes. Exceeding the given sizes
+will produce a fatal error. In some cases writing the @sc{grg} file in
+a slightly different way will solve the problem, in others it will not. In
+the latter case the relevant values must be increased in the source code and
+the @code{gurgle} program recompiled. The following limits are all maximums and
+size is size in characters unless specified otherwise.
+
+A number of the static buffers in @sc{gurgle} have been rewritten to scale
+dynamically and hence have no fixed limit anymore. These are indicated
+by the asterix against an entry below. You can get more information by
+looking at the debug output under the operating limits section.
+
+@example
+Name           Size   Description (Dynamic?)
+TEXMAXTEX       4096  text body (*)
+TEXPBMAX       16384  pushback buffer (*)
+MAXMACRONAME      32  length of a macro/equate/variable name
+MAXMACRODEF      256  length of a macro definition (*)
+MAXEQUATEDEF    1024  length of a reversed equate definition (*)
+MAXMACROS         64  number of user macros (*)
+MAXEQUATES       128  number of equates (*)
+TEXSORTONMAX       4  sort depth
+TEXBANNERMAX       4  banner sort groups (*)
+TEXDBFFILEMAX      8  number of DBF files (*)
+TEXFILTERMAX       8  number of filters
+DBFFIELDMAX       16  length of a DBF field name (actually 10 stucturally)
+STRMAX           256  length of a string argument and data type (*)
+TEXBLOCKMAX        8  number of user text bodies (*)
+REGEXPMAX        256  length of a regular expression
+@end example
+
+@node Text Processing, , , Top
+@section Text Processing
+
+@cindex Delimited text files
+@cindex Databases, delimited text files
+@cindex Text processing
+@cindex Input files, demilited text
+The @code{gurgle} program can parse an input file in delimited ascii format
+and load it internally as an ordinary database file. All the
+normal @code{gurgle} operations such as sorting, filtering, field evaluating,
+and equates can be used. This section gives an overview of how to use this
+feature.
+
+The simplest way is to use the built in patterns. These make @code{gurgle} process
+input text in the same way as @emph{awk}, so that each line of input is treated
+as a record and each whitespace separated group on a line is treated as a field
+of the record. Like @emph{awk} the field delimiter can be changed by using an
+environment variable.
+
+@menu
+* Declaring Text Input Files::
+* Changing the Delimiter::
+* Referencing Fields::
+* Redefining Patterns::
+@end menu
+
+@node Declaring Text Input Files
+@subsection Declaring Text Input Files
+
+@cindex Defining, text databases
+@cindex Databases, defining text databases
+@cindex Databases, DATABASE for text databases
+You declare a file as text input using the predefined macro @sc{database}.
+The name of the file must not have a @code{.dbf} extension. The special case
+filename which is just @code{-} can be used to indicate that the input file is
+to come from standard input (piped into @code{grg}). Note that file types can
+be mixed and matched as in the example below.
+
+@example
+%%DATABASE	"database.dbf"
+%%DATABASE	"mode.txt" "-"
+@end example
+
+In the above the @code{database.dbf} file is opened as normal, but the
+@code{mode.txt} file and @code{stdin} are read in and parsed as @emph{awk}
+structured files and
+converted into database files. The names of the database files for reference
+in equates would be @code{database}, @code{mode}, and @code{-}. Since
+@code{-} could clash in an equate the @code{-} should ideally
+be put first in the list of databases (making it master).
+
+@node Changing the Delimiter
+@subsection Changing the Delimiter
+
+@cindex Text databases, delimiter setting
+@cindex Text databases, using DELIM
+You can redefine the delimiter used to separate fields in the input by using
+the @sc{define} predefined macro and setting the environment variable
+@strong{DELIM}, as in the example below.
+
+@example
+%%DEFINE	DELIM	:
+@end example
+
+The above sets the delimiter to the colon character, equivalent to doing
+@code{-F:} with @emph{awk}. You can give more than one character to @strong{DELIM}
+in which case any of the given characters would count as a delimiter.
+
+@node Referencing Fields
+@subsection Referencing Fields
+
+@cindex Text databases, referencing fields
+@cindex Referencing fields, text databases
+@cindex Text databases, column names
+@cindex Text databases, using NAMCOL
+Once loaded, the text input file can be treated identically to a normal
+database file. Each field in the input record is given a numeric name so as
+they can be distinguished. These names have the form @code{Unnn} where @code{nnn}
+is a three digit number. For example, to reference the first three fields in
+the input you would do as in the example below.
+
+@example
+%%EQUATE test	"ABC"%U001=?%U002:%U003;
+%%RECORD
+%U001 %U002 %U003
+@end example
+
+The example shows fields being referenced in an equate and a text body in the
+same way as fields are normally referenced. Records can also be sorted on the
+fields or filtered as normal. The system variables @code{_eq_totrec}
+and @code{_eq_currec} also get set for a text input file as
+normal. Also direct field indexing works as normal so that the contents of
+any partiulcar record (input line) can be accessed.
+
+Real column names can be setup by using the @strong{NAMCOL} environment variable
+by simply defining it. Then instead of the form @code{Unnn} the values of the
+fields in the first record in the input file will be taken as the column names
+and that record will be ignored. These will always be used in uppercase and
+truncated to ten characters. Do not use non-supported field characters.
+The example below sets @strong{NAMCOL} and prints fields from @code{dogs.txt} also
+shown below.
+
+@example
+Contents of dogs.txt:
+Name      Type      Id
+Bounce    Scottie   119
+Jack      Terrier   102
+@end example
+
+@example
+%%DATABASE  "dogs.txt"
+%%DEFINE	NAMCOL
+%%RECORD
+%NAME %TYPE %ID
+@end example
+
+Note that the @strong{NAMCOL} directive is globally applied to all databases in
+the @sc{grg} file and cannot be set individually for each input file.
+
+To establish which field is which when not using @strong{NAMCOL} and what the
+column names are a simple @sc{grg} file can be created that
+uses the default header and record text bodies.
+
+By default all fields loaded from a delimited text file default to character
+strings. The type of each column can be explicitly setup using the
+@strong{DEFCOL} environment variable by simply defining it. The field values
+in the first record of the input file (or second record if @strong{NAMCOL}
+is also used) will be taken as the field types and that record will be
+ignored. Field types are single upper case characters. They can be C
+for character data, N for numeric/decimal data, D for date data, and L
+for boolean data (1 or 0).
+The example below extends the input file above to include a record with
+the field types.
+
+@example
+Contents of dogs.txt:
+Name      Type      Id
+C         C         N
+Bounce    Scottie   119
+Jack      Terrier   102
+@end example
+
+Note that the @strong{DEFCOL} directive is globally applied to all databases in
+the @sc{grg} file and cannot be set individually for each input file.
+
+@node Redefining Patterns
+@subsection Redefining Patterns
+
+@cindex Defining, patterns
+@cindex Text databases, redefining patterns
+@cindex User defined text databases
+This is not for the faint hearted. You can skip to the next part
+(@pxref{RDBMS Queries}).
+
+Sometimes the input text does not match an @emph{awk} like structure. In this case the
+patterns defining how to process the input can be changed. This is done using
+the @sc{pattern} predefined macro. This takes five arguments. The
+example below shows the pattern definitions to process @emph{awk} like
+input (these are built in to @code{gurgle}).
+
+@example
+%%PATTERN	"<awk><nul>" "<nul>" "" "<awk><sor>" "<sor>"
+%%PATTERN	"<awk><sor>" "<wht>" "" "<awk><sor>" "<nul>"
+%%PATTERN	"<awk><sor>" "<nul>" "" "<awk><sof>" "<sof>"
+%%PATTERN	"<awk><sof>" "<del>" "" "<awk><sor>" "<eof>"
+%%PATTERN	"<awk><sof>" "<any>" "" "<awk><sof>" "<fld>"
+%%PATTERN	"<awk><sof>" "<nul>" "" "<awk><sor>" "<eof>"
+%%PATTERN	"<awk><sor>" "<new>" "" "<awk><nul>" "<eor>"
+@end example
+
+The arguments are as follows. The first argument is the @emph{mode context}.
+Each pattern can
+only apply if the current mode is the same as its @emph{mode context}.
+The default
+mode is @code{<awk><nul>}, and therefore in the above only the first pattern will
+match. The second argument is the tokens in the text that must be present for
+the pattern to match, this is discussed in more detail later. The third
+argument is
+an equate expression that will be run if the pattern matched, this can then
+also have a say in whether the pattern matches or not. The fourth argument is
+the new mode to enter if the pattern matches. The fifth argument is the token
+to return to the parser if the pattern matches. These arguments are now
+discussed in more detail. Note that the first three arguments essentially define
+what the pattern to match is and the last two define what steps to
+take if the pattern does match.
+
+@menu
+* Tokens and Syntax::
+* Mode::
+* Input Pattern::
+* Equates::
+* New Mode::
+* Token::
+* AWK Patterns::
+* Pattern Debugging::
+* Limits::
+@end menu
+
+@node Tokens and Syntax
+@subsubsection Tokens and Syntax
+
+@cindex Patterns, tokens and syntax
+@cindex Tokens, in patterns
+@cindex Syntax, of patterns
+A token is a three character sequence enclosed in angle brackets. Any
+characters can be used and tokens are case sensitive. With the exception of
+the input text pattern and the equate expressions the other fields can
+consist only of tokens.
+
+The @emph{mode context} argument can consist of tokens, the bar character @code{|} or the
+brackets @code{(} and @code{)}. The @emph{new mode} argument can consist of tokens
+only. The @emph{token} argument can consist of one token only. The @emph{input}
+argument can consist of tokens, characters, and some special characters.
+
+@node Mode
+@subsubsection Mode
+
+@cindex Patterns, mode
+Only those patterns which match the current mode can match, the others are
+ignored. A mode is a sequence of one or more tokens, the names of the tokens
+or sequences can be user defined. The initial mode is @code{<awk><nul>} but
+this can be changed using the environment variable @code{DFAMODE}. If you are
+defining additional patterns it is advisable to set this to exclude the awk
+inbuilt patterns from matching as in the example below.
+
+@example
+%%DEFINE DFAMODE		<usr><nul>
+%%PATTERN "<usr><nul>"
+%%PATTERN "<usr><u00>|<usr><u01>"
+@end example
+
+Note that in the above the bar operator separates options, so the second
+pattern is actually applicable in two modes. Since the bar operator has a
+lower precedence than the concatenation operator then the two modes are
+@code{<usr><u00>} or @code{<usr><u01>}. Brackets can be used if neccessary to
+avoid ambiguities in the input. Note that instead of the bar two patterns
+could have been defined which were identical in the other fields but one was
+defined for each mode it was to match under. The final result of using a
+bar or multiple patterns is identical.
+
+@node Input Pattern
+@subsubsection Input Pattern
+
+@cindex Patterns, input pattern
+@cindex Matching input patterns
+@cindex Input Pattern
+@cindex Tokens
+For each pattern that matches the current mode the input pattern must match
+the input stream of characters for the whole pattern to match. The input
+pattern can consist of tokens or characters, however certain characters must
+be escaped and the tokens cannot be user defined. Each token generally
+represents a set of characters and is for convenience sake. The characters
+that must be escaped using a @code{\c} mechanism (or the special tokens) are
+left and right brackets, the bar character, and the star character. The first
+two are used to resolved ambiguities in priorities of operators, the bar is
+used to separate options, and the star is used to indicate zero or more
+occurences of a sequence. Note that the bar and star
+operators are not supported, although the bar operator can be simulated by
+defining multiple patterns, one for each option, like the modes. Some example
+input patterns are shown below.
+
+@example
+"<dec><dec>"
+"f1<new>"
+@end example
+
+The first pattern matches a sequence of characters that are two decimal digits,
+the second a sequence which is @code{f1} followed by a newline. The complete
+set of predefined tokens is given below:
+
+@table @code
+@item Token
+Character Set
+@item <nul>
+NUL Special Character
+@item <sot>
+Start of Text (before first input character), not implemented
+@item <eot>
+End of Text (after last input character), not implemented
+@item <sol>
+Start of Line (before first input character of line), not implemented
+@item <eol>
+End of Line (after last input character of line), not implemented
+@item <spc>
+" "
+@item <tab>
+"@code{\t}"
+@item <wht>
+"@code{ \t}"
+@item <new>
+"@code{\n}"
+@item <car>
+"@code{\r}"
+@item <del>
+"@code{ \t}"
+@item <abc>
+"abcdefghijklmnopqrstuvwxyz"
+@item <ABC>
+"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+@item <dec>
+"0123456789"
+@item <hex>
+"0123456789abcdef"
+@item <HEX>
+"0123456789ABCDEF"
+@item <sym>
+"@code{!\"#$%&'}@code{()*+,-./:;<=>?@@[\]^_`@{|@}~}"
+@item <any>
+"@code{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789}@code{!\"#$%&'}@code{()*+,-./:;<=>?@@[\]^_`@{|@}~ \t}"
+@item <all>
+"@code{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789}@code{!\"#$%&'}@code{()*+,-./:;<=>?@@[\]^_`@{|@}~ \t\n\r}"
+@item <bar>
+"@code{|}"
+@item <not>
+"@code{!}"
+@item <mul>
+"@code{*}"
+@item <lbr>
+"@code{(}"
+@item <rbr>
+"@code{)}"
+@end table
+
+The @code{<nul>} token is special because it effectively matches any character,
+but when it does the matching character is left on the input stream. So for
+example the patterns @code{<nul>A} and @code{A} both match @code{A} on the
+input stream. The @code{<nul>} pattern has a lower matching priority though as
+a more specific match is preferred over a more general one. If more than one
+input pattern matches the input stream, the longer match is preferred. For
+example if the input stream had @code{ABC} then the patterns @code{A}, @code{AB},
+and @code{ABC} could all match, but the last would be chosen. If two patterns
+match and are the same length then the earlier one (in the order the patterns
+were defined) is chosen.
+
+@node Equates
+@subsubsection Equates
+
+@cindex Patterns, using equates
+@cindex Equates, used in patterns
+For each pattern that matched the given reversed equate expression is executed. If there
+is none then the pattern matches by default. If the equate expression leaves
+no value on the stack then it is assumed to be true, however if it does leave
+a value on the stack then the value is interpreted as a boolean type, only if
+it is true does the pattern match. This facility allows more complex work to
+be done to further control the patterns that match. Some additional system
+variables can be used within the equate. These are @code{_eq_pat}, which has
+the sequence of characters the pattern matched. The following variables,
+@code{_eq_pfn}, @code{_eq_pfl}, and @code{_eq_pft} can be used to set the name,
+length, and type of the field respectively. By default each field is named
+numerically, with a length equal to the length of the longest value of the
+field in the input and with a string type. However, for a pattern that matches
+a field (ie. returns the @code{<sof>}) token then these can be used to set these
+attributes explicitly, as in the example below.
+
+@example
+"\"field1\">>_eq_pfn 32>>_eq_pfl 78>>_eq_pft"
+"<<_eq_pat\"abc\"="
+@end example
+
+Note that for the type the ascii character value of @code{C}, @code{N}, @code{D},
+or @code{B} must be used to indicate the string, numeric, date, or logical
+types for a field. The field will be created with the values given, so that
+for example if an input sequence exceeds the field length then it will be
+truncated. The second equate shows a boolean value being returned so that the
+pattern will only match if it matches the sequence @code{abc}.
+
+@node New Mode
+@subsubsection New Mode
+
+@cindex Patterns, changing modes
+@cindex Changing pattern mode
+Two things happen on a matching pattern, the first of these is that a new
+mode is set. This field must always have a value but it could set the mode
+to be the same as the current mode if no change is neccessary.
+
+@node Token
+@subsubsection Token
+
+@cindex Patterns, result token
+@cindex Patterns, field/record structure
+@cindex Text databases, fields and records
+Any set of patterns defining an input stream must eventually result in the
+correct sequence of parse tokens. These represent when a field starts and
+ends, when a record starts and ends, and the contents of fields. This
+allows the parse engine to build the database file correctly. The sequence of
+these tokens must be returned as zero or more start of record followed by
+zero or more start of field, field contents, end of field tokens, followed
+by end of record tokens. The only valid parse tokens that can be used are
+given in the table below.
+
+@table @code
+@item Token
+Description
+@item <nul>
+Do nothing with the input
+@item <sor>
+Flag start of a record
+@item <sof>
+Flag start of a field
+@item <fld>
+Contents of a field (can be returned multiple times)
+@item <eof>
+Flag end of a field
+@item <eor>
+Flag end of a record
+@item <err>
+Generate an error
+@end table
+
+@node AWK Patterns
+@subsubsection AWK Patterns
+
+@cindex Patterns, for awk-style processing
+@cindex AWK patterns
+In this section the built in awk patterns are dissected one by one so as how
+they work can be shown.
+
+@example
+%%PATTERN  "<awk><nul>" "<nul>" "" "<awk><sor>" "<sor>"
+%%PATTERN  "<awk><sor>" "<wht>" "" "<awk><sor>" "<nul>"
+%%PATTERN  "<awk><sor>" "<nul>" "" "<awk><sof>" "<sof>"
+%%PATTERN  "<awk><sof>" "<del>" "" "<awk><sor>" "<eof>"
+%%PATTERN  "<awk><sof>" "<any>" "" "<awk><sof>" "<fld>"
+%%PATTERN  "<awk><sof>" "<nul>" "" "<awk><sor>" "<eof>"
+%%PATTERN  "<awk><sor>" "<new>" "" "<awk><nul>" "<eor>"
+@end example
+
+The first which matches on the default initial mode matches any character on
+the input stream (but leaves the input stream as it is) jumps to the start
+of record mode, returning the start of record token in the process. In the
+start of record mode there are three possible matching patterns. They match
+on whitespace, the nul character and on the newline character. Whitespace is
+ignored (so that multiple spaces and tabs in the input are not interpreted
+as multiple fields), whereas the @code{<nul>} flags the start of a field and sets
+the mode to start of field mode. Since the @code{<nul>} is defined after the pattern
+for whitespace it will only match when the input is not whitespace. The
+newline character (which should actually also be defined above the @code{<nul>}
+pattern) sets the mode back to the initial mode and flags the end of the
+record. The remaining patterns only match in start of field mode. The three
+possible matching characters are the delimiter (normally whitespace), any
+other character except newline, and the nul character again. The order these
+are declared in is important. A character which is a delimiter character will
+always match first and sets the mode back to start of record mode (in
+prepartion for another field or end of record) and flags the end of field).
+Otherwise the character will match the next pattern (except if newline) and
+this leaves the mode the same but flags that the character is to be appended
+to the field definition. Finally on a newline the @code{<nul>} character matches and
+flags the end of the field and puts the mode back to start of record mode.
+Note that just matching a newline here (rather than null) wouldn't work as the
+newline signals the end of the record but would be taken off to flag the end
+of the field and end of record would not then be flagged. So using the @code{<nul>}
+matches the newline to return end of field but leaves the newline on the input
+stream so that in the start of record mode it can be matched by the last
+pattern definition to indicate the end of the record. This is neccessary since
+usually the last field does not have a delimiter after it.
+
+@node Pattern Debugging
+@subsubsection Pattern Debugging
+
+@cindex Patterns, debugging
+@cindex Debugging patterns
+When a set of patterns is not working the parser will either produce the wrong
+output, loop indefinitely, or crash. You can turn on debugging with the
+@code{-d1} and @code{-d2} flags to see what the DFA (Determinate Finite Automata,
+which isn't quite true)
+representation of your input patterns is. The @code{-d1} option shows the
+various arrays defining the DFA, and the @code{-d2} options shows a trace of
+the build of the main state arrays. It is beyond the scope of this
+document to describe the contents and structure of these arrays.
+
+@node Limits
+@subsubsection Limits
+
+@cindex Patterns, limits
+@cindex Limits for patterns
+There are no limits on the dynamic database that aren't part of the limits of
+an ordinary database file. The DFA constructor and pattern parser although
+essentially dynamic do have a number of internal limits. Some of these are
+displayed in debug output but not all of them. Generally if they are exceeded
+an error will be produced.
+
+@example
+Name            Size  Description
+TEXPATTERNMAX     64  maximum number of pattern defintions
+DYNRECINI         16  dynamic record initialiser/step
+DYNFLDINI         16  dynamic field initialiser/step
+TEXMAXUNQCHARS    32  number of unique characters/position
+TEXMAXUNQMODES    32  number of unique modes
+TEXMAXUNQPOSTS    16  number of unique positions
+TEXTEXTPATMAX     64  input pattern maximum length (characters)
+TEXMODEPATMAX     64  mode pattern maximum length (characters)
+TEXMAXCHARSET    128  input pattern character set size
+TEXDFAMAXSTATES   16  maximum number of unique states/postition
+@end example
+
+@node RDBMS Queries, , , Top
+@section RDBMS Queries
+
+@cindex SQL databases
+@cindex Querying SQL databases
+@cindex GNU SQL Server
+@cindex PostgreSQL Server
+@cindex MySQL Server
+@cindex Ingres
+@cindex RDBMS support
+The @code{gurgle} program can make an SQL query to
+@emph{GNU SQL}, @emph{PostgreSQL}, @emph{MySQL} or
+an @emph{CA-Ingres} RDBMS and load the
+results internally as a database file. Subsequent
+to this it can be treated exactly as if it was a database file initially, all
+the normal operations such as sorting, filtering, field evaluatiing, and
+equate processing may be used. The section gives an overview of how to use
+this feature. This feature will only work if support was added for it when the
+program was compiled.
+
+You must generally run @strong{gurgle} on the database server for the query to work
+unless you have some form of networked service in operation.
+
+@menu
+* Declaring SQL Input Files::
+* Physical Database::
+* Referencing Columns::
+* NULL Value Handling::
+* Miscellaneous::
+@end menu
+
+@node Declaring SQL Input Files
+@subsection Declaring SQL Input Files
+
+@cindex SQL databases, defining
+@cindex SQL input files
+@cindex SQL databases, using DATABASE
+You declare a file as an SQL query using the predefined macro
+@sc{database}. The name of the file must have a @code{.sql} extension.
+This is shown in the example below which loads two files as SQL queries.
+
+@example
+%%DATABASE	"cat.sql" "dog.sql"
+@end example
+
+In the above the @code{cat.sql} file and @code{dog.sql} files are treated as SQL
+queries (they do not need to exist as files). In the former this would be @code{select * from cat} and in the latter
+this would be @code{select * from dog}. The names of the database files for
+reference in equates would be @code{cat} and @code{dog}. In this example@code{ 
+cat} would be the master database file since it was loaded first.
+
+It is possible to use any SQL @code{select} statement if the default is not suitable
+since the @sc{database} predefined macro allows a text body extension to
+define the SQL @code{select} statement for this type only. The example below shows how
+this would be done.
+
+@example
+%%DATABASE  "cat.sql"
+%%DATABASE  "dog.sql"
+select name, type from dog order by name
+@end example
+
+In the above the @code{cat.sql} file is interpreted as in the previous example
+but the @code{dog.sql} file has a customised SQL @code{select} statement defining what
+that database file should contain. The SQL @code{select} statement can be of any
+complexity up to the ordinary size limits of a text body, but there can be only
+one (unless formed from a @code{union}) and no other SQL statement can be used.
+
+@node Physical Database
+@subsection Physical Database
+
+@cindex SQL databases, selecting
+@cindex SQL databases, physical database
+For any RDBMS SQL Query to work a physical database must be defined to which
+the SQL query is directed. Only one physical database can be defined for all
+the queries in the @sc{grg} file. The physical database is defined as shown in
+the example below.
+
+@example
+%%DEFINE	PHYSDB animals
+@end example
+
+Remember that there is no default physical database. Without defining this the
+loading of SQL Query database files will fail.
+
+A physical database is only required for the @emph{Ingres} RDBMS since this has
+multiple ones. If you are using the @emph{GNU SQL Server} you do not need to use
+this option.
+
+@node Referencing Columns
+@subsection Referencing Columns
+
+@cindex SQL databases, referencing fields
+@cindex Referencing fields in SQL databases
+@cindex SQL databases, using NAMCOL
+Once loaded, the SQL Query input file can be treated identically to a normal
+database file. Each field in the input record is given a numeric name so as
+they can be distinguished. These names have the form @code{Unnn} where @code{nnn}
+is a three digit number. For example, to reference the first three columns in
+the SQL Query you would do as in the example below.
+
+@example
+%%RECORD
+%U001 %U002 %U003
+@end example
+
+The real column names from the SQL query can be used instead
+by setting the @strong{NAMCOL} environment variable by simply defining it. Then
+instead of the form @code{Unnn} the real column names will be used, converted
+to uppercase and truncated to 10 characters. Any non-supported field character
+may cause problems. Any columns that do not cleanly map can be renamed using
+the SQL @code{select x as y} syntax if neccessary (this can be often since the
+column naming conventions for @emph{Ingres} are quite flexible).
+The example below sets @strong{NAMCOL}
+and prints fields from @code{dog.sql} as used in an earlier example.
+
+@example
+%%DEFINE	PHYSDB animals
+%%DEFINE	NAMCOL
+%%DATABASE  "dog.sql"
+select name, type, id# as id from dog order by name
+%%RECORD
+%NAME %TYPE %ID
+@end example
+
+Note that like @strong{PHYSDB} the @strong{NAMCOL} directive is globally applied to
+all queries in the @sc{grg} file and cannot be set on a per-query basis.
+Note that setting NAMCOL will also affect the behaviour of any delimited text
+file databases in the same @sc{grg} file.
+
+To establish which field is which when not using @strong{NAMCOL} and what the
+column names have been mapped to a simple @sc{grg} file can be created that
+uses the default header and record text bodies.
+
+@node NULL Value Handling
+@subsection NULL Value Handling
+
+@cindex SQL databases, NULL handling
+@cindex NULL, in SQL databases
+By default any column value in the query that is @code{null} will just be
+created in the database file as an empty string value. For some applications
+it may be neccessary to distinguish the @code{null} value from empty strings.
+You can redefine the value used for a @code{null} by using the
+@sc{define} predefined macro and setting the environment variable
+@strong{NULL}, as in the example below.
+
+@example
+%%DEFINE	NULL -
+@end example
+
+The above sets the value to use for a @code{null} to the dash character.
+
+Note that like @strong{NAMCOL} the @strong{NULL} directive is globally applied to
+all queries in the @sc{grg} file and cannot be set on a per-query basis.
+
+@node Miscellaneous
+@subsection Miscellaneous
+
+@cindex Field length
+For the most part when you load a database from an SQL Query the maximum field
+width of 256 characters is relaxed and any length fields are supported. There
+may be some problems using equate processing with large text fields however.
+
+@node Using GUILE, , , Top
+@section Using GUILE
+
+@cindex Using GUILE
+@cindex GUILE equates
+@cindex Equates, guile support
+If your version of @sc{gurgle} has been compiled with support for @sc{guile}
+(you will get a banner saying so when you start it up) then you can define
+equates in the scheme language rather than the @sc{gurgle} language. The
+resulting equates can be used in exactly the same way as those defined in the
+native language - they can be called from native language equates and from text
+bodies. They cannot be used where a reversed equate is required. A native
+language equate can pass any number of arguments to the @sc{guile} equate (the
+types of which will be silently mapped) and the @sc{guile} equate can return a
+numeric or string argument to the native language equate. From the @sc{guile}
+side any native language equate can be directly called if it takes no
+arguments or only one argument and if it returns one argument this will be
+returned as the result. There are also some additional functions that can be
+called from the @sc{guile} side defined below. This support is relatively
+untested.
+
+A scheme equate is defined with the @sc{eqguile} predefined macro. Arguments
+must currently be given as a white space separated list following the name of
+the equate (as seen from the native language side and the @sc{guile} side).
+You should not include the @code{define} construct as this will be wrapped
+around automatically (to include the specified arguments). Any @code{define}
+commands used within the body of the scheme equate will only be visible from
+the @sc{guile} side.
+
+@menu
+* GURGLE Procedures::
+@end menu
+
+@node GURGLE Procedures
+@subsection GURGLE Procedures
+
+@cindex GURGLE procedures
+@cindex GUILE, GURGLE procedures
+@cindex GUILE, system variable access
+@cindex GUILE, database access
+@findex grg_getstrsysvar
+@findex grg_getnumsysvar
+@findex grg_putstrsysvar
+@findex grg_putnumsysvar
+@findex grg_getfield
+These are functions that can be called from the @sc{guile} side code. They
+allow the @sc{guile} side to read and manipulate @sc{gurgle} system variables
+and read database fields.
+
+The @code{grg_getstrsysvar(s)} procedure takes a string which is the name of
+a string valued system variable and returns its current value, eg. @code{(display
+grg_getstrsysvar("_eq_extn"))} to display the value of the @code{_eq_extn} variable.
+
+The @code{grg_getnumsysvar(s)} procedure takes a string which is the name of
+a numeric valued system variable and returns its current value, eg. @code{(display
+grg_getstrsysvar("_eq_verbose"))} to display the value of the @code{_eq_verbose}
+variable.
+
+The @code{grg_putstrsysvar(s,v)} procedure takes a string which is the name of
+a string valued system variable and a string which is the value to assign to
+that variable. It returns the assigned value, eg. @code{(display
+grg_putstrsysvar("_eq_extn",".html"))} to change the value of the file
+extension and to display the change to the user.
+
+The @code{grg_putnumsysvar(s,v)} procedure takes a string which is the name of
+a numeric valued system variable and a number which is the value to assign to
+that variable. It returns the assigned value, eg. @code{(display
+grg_putnumsysvar("_eq_verbose",0))} to reset the value of the verbose state.
+
+The @code{grg_getfield(f,r,d)} procedure takes three arguments: the name of
+a field (string), a record (number) from 1 to the number of records, and the
+name of a database (string) to which the field is defined in. It returns the
+value of the given field of the given record in the given database. For
+example, @code{(display grg_getfield("NAME",2,"people"))} would display the
+value of the "Name" field of the 2nd record of the "people" database. This is
+the equivalent of the fully dereferenced field mechanism in the native
+language, ie. the above would be @code{%people->NAME[2]}.
+
+@node Errors, , , Top
+@section Errors
+
+@cindex Error messages
+Any error is considered fatal by the preprocessor program. This means it will
+abort immediately. The debug mode (@pxref{Running GURGLE}) can be
+used to provide a lot of additional information to track down the error, if
+it is not immediately obvious. The following is a list of all the errors with
+pointers to any relevant help in alphabetical order.
+
+grg: bad equate name (probably unescaped equate esc)
+@*
+Either an undefined equate name, or the equate escape character has been used
+inadvertently without escaping in a text body (the @code{\#} character sequence
+should be used in this case).
+
+grg: couldn't fill dynamic dbf file, '@emph{filename}'
+@*
+Covers a number of possible errors that stem from not being able to transfer a
+delimited text input file into a growing dBase3+ file structure (used
+internally to hold databases).
+
+grg: couldn't open dbf file, '@emph{filename}'
+@*
+The named file declared via a @sc{grgdbffile} predefined macro could not
+be opened as a dBase3+ file (either doesn't exist or incorrect permissions).
+
+grg: couldn't open dynamic SQL dbf file, '@emph{filename}'
+@*
+Always generated when a SQL Query declared via a @sc{database}
+predefined macro failed for some reason (check the SQL statement is correct via
+another means, ensure the physical database @strong{PHYSDB} is defined).
+
+grg: couldn't open dynamic dbf file, '@emph{filename}'
+@*
+The named file declared via a @sc{database} predefined macro could not
+be opened as a delimited text file (either doesn't exist or incorrect permissions).
+
+grg: couldn't open file, '@emph{filename}'
+@*
+The given filename could not be opened for some reason. Is the path correct,
+filename correct, and filename readable?
+
+grg: couldn't open include file, '@emph{filename}'
+@*
+The specified include file couldn't be opened for some reason. Is the path
+correct, filename correct, and filename readable?
+
+grg: couldn't stop dynamic dbf file, '@emph{filename}'
+@*
+Covers a number of possible errors that stem from not being able to restructure
+a delimited text input file that has been loaded into a growing dBase3+ file
+structure (used internally to hold databases). Check pattern definitions.
+
+grg: dfa.beg alloc failed
+@*
+Low level out of memory error during DFA construction from pattern definitions.
+
+grg: dfa.chr alloc failed
+@*
+Low level out of memory error during DFA construction from pattern definitions.
+
+grg: dfa.end alloc failed
+@*
+Low level out of memory error during DFA construction from pattern definitions.
+
+grg: dfa.end realloc failed
+@*
+Low level out of memory error during DFA construction from pattern definitions.
+
+grg: dfa.mid alloc failed
+@*
+Low level out of memory error during DFA construction from pattern definitions.
+
+grg: division by zero
+@*
+An attempt was made to divide a number by zero in an equate expression.
+
+grg: equate argument expected, '@emph{string}'
+@*
+An invalid argument was given to an equate macro definition. See
+@ref{Predefined Macros} on predefined macros in general and
+@ref{EQUATE} on equate macros in particular.
+
+grg: equate definition too long, '@emph{string}'
+@*
+The equate definition after reversing (or if entered as reversed) is too long
+and must be shortened. Splitting up into more than one equate is usually the
+best way to do this.
+
+grg: equate right operand expected, '@emph{string}'
+@*
+Any situation during equate processing where the operator expected a right
+operand (generally a variable name) immediately following the operator.
+
+grg: equate stack overflow
+@*
+When returning from evaluation of an equate back to the text body, filter
+definition or pattern definition from which it was called has more than one
+value left on the stack.
+
+grg: equate stack underflow
+@*
+When returning from evaluation of an equate back to the text body, filter
+definition or pattern definition from which it was called has less than zero
+values left on the stack. Or when an operator requires an operand from the
+stack but the stack is empty.
+
+grg: equate var defined differently, '@emph{string}'
+@*
+Occurs when assigning a value to a system variable that does not match the
+data type the system variable was declared with. Does not occur for local
+variables since they just coerce the value to match their type (if possible).
+
+grg: field argument expected, '@emph{string}'
+@*
+A field argument was expected for either the @sc{sorton} or @sc{banner}
+predefined macros. See @ref{Predefined Macros} on field
+arguments and @ref{SORTON} and @ref{BANNER} on these macros in particular.
+
+grg: field length overflow
+@*
+A field value exceeded the defined length for a field. Only occurs from
+PostgreSQL driver and indicates that the determined length of a field has
+probably not been properly derived and indicates a bug for handling the
+particular column type in a query result.
+
+grg: field name too long
+@*
+A field name is limited to ten characters (dBase3+ compatible).
+
+grg: field right operand expected
+@*
+A field operator has been used but the field name does not immediately follow
+the operator (or has not been given).
+
+grg: filter equate - number/string/date expected
+@*
+The data type returned by a filter definition based on an equate expression is
+not one of these.
+
+grg: group text body too big
+@*
+The definition of the text body of a group exceeded the maximum text body size.
+
+grg: illegal ARG character
+@*
+A character not allowed during the processing of the @sc{args} mode was seen.
+
+grg: illegal TXT character
+@*
+A character not allowed during the processing of the @sc{standard} mode
+was seen.
+
+grg: illegal character, '@emph{char}'
+@*
+The preprocessor is very strict about characters that are not where they
+should be. Check that all predefined macros start at the beginning of a line
+and that they start with the double percent sequence. Check that comment
+starts at the beginning of a line with a double percent space sequence. Check
+that the arguments given to the predefined macros are correct (make sure that
+user macro definitions and equate definitions have been given a name and
+that string arguments start with a double character). Also check that there
+are not any spurious control characters in the file. See
+@ref{GURGLE File Format} for an overview of the structure, syntax, and
+semantics of @sc{grg} files.
+
+grg: illegal character or operator in equate, '@emph{string}'
+@*
+A character that is not valid in its current position in an equate definition
+has been identified.
+
+grg: index overflow
+@*
+Occurs when using the stroke operator and the index given to access a character
+of a string was greater than the length of the string.
+
+grg: index underflow
+@*
+Occurs when using the stroke operator and the index given to access a character
+of a string was less than zero.
+
+grg: inputs left bracket expected
+@*
+The @code{inputs} keyword requires brackets to immediately follow it (although
+they can have no content).
+
+grg: inputs right bracket expected
+@*
+The @code{inputs} keyword requires brackets to immediately follow it (although
+they can have no content).
+
+grg: invalid operand type
+@*
+The data type of the operand did not meet the requirements of the operation
+being applied at the time.
+
+grg: left token without right in pattern
+@*
+An error in a pattern definition, the token is enclosed within @code{<...>}
+bracket pairs, the closing one is missing.
+
+grg: local variable stack overflow
+@*
+The number of local variables on the stack (those of the current equate all
+equates back up the call chain to the first one) have overrun the general
+equate processing stack.
+
+grg: macro argument expected, '@emph{string}'
+@*
+Something other than a macro argument was used with either the @sc{define}
+or the @sc{equate} predefined macros. See section
+@ref{Predefined Macros} on macro arguments and
+@ref{DEFINE} and @ref{EQUATE} on these
+particular macros.
+
+grg: maximum TeX block exceeded
+@*
+A text body definition has exceeded the maximum size given in
+@ref{Hard Limits} on the hard limits of the preprocessor. There is no
+way to work around this, other than to reduce the size of the text body. This
+can be done by converting parts of the text body into user defined macros,
+user text bodies and equates.
+
+grg: mismatch in comment brackets
+@*
+One comment bracket (either @{ @} or /* */ pairs) opening or closing is missing.
+
+grg: mismatch in index brackets
+@*
+One indexing bracket ([ ] pairs) opening or closing is missing.
+
+grg: mismatch in loop brackets
+@*
+One looping bracket ([ ] pairs) opening or closing is missing.
+
+grg: mismatch in loop/call brackets
+@*
+One looping/call bracket (( ) pairs) opening or closing is missing.
+
+grg: missing loop separator
+@*
+The loop separator ";" or "do" is missing.
+
+grg: no database defined
+@*
+Any @sc{grg} must declare at least one database file using the
+@sc{%%database} predefined macro.
+
+grg: no such database
+@*
+Occurs when accessing a database with the @code{->} mechanism or the @code{:} mechanism
+on a roll/through loop and the named database has not been declared via the
+@sc{database} predefined macro.
+
+grg: numeric argument expected, '@emph{string}'
+@*
+One of the @sc{page01} or @sc{pagenn} predefined macros expected a
+numeric argument. See @ref{Predefined Macros} on numeric
+arguments and sections @ref{PAGE01} and
+@ref{PAGENN} on these two macros.
+
+grg: numeric operand expected
+@*
+An operation required a numeric data type.
+
+grg: numeric operands expected
+@*
+An operation required two numeric data types.
+
+grg: numeric or string operand expected
+@*
+An operation required a numeric or string data type.
+
+grg: operands types differ
+@*
+An operation requires two operands of any type but they must be of the same
+type.
+
+grg: out of place argument, '@emph{string}'
+@*
+This should never happen. If it does don't panic, just call for help.
+
+grg: pattern parse error
+@*
+There was a syntax error in the pattern definitions.
+
+grg: premature end of pattern after escape sequence
+@*
+There was a syntax error in the pattern definitions.
+
+grg: pushback buffer exceeded
+@*
+The internal pushback buffer has overflowed. This is used to pushback and
+cause this resource to break. See section @ref{Hard Limits} on the hard
+limits of the preprocessor. Break down include files into separate files and
+reduce the size of user macros to work around this problem.
+
+grg: query statement buffer overflow
+@*
+The size of the query block in each SQL @ref{DATABASE} directive is statically
+set at a maximum of 16384 bytes. If exceeded this error will occur.
+
+grg: record index out of range
+@*
+The given index in the @code{x[n]} or @code{x->y[n]} syntax was less than 1 or greater
+than the total number of records in the associated database.
+
+grg: record loop right operand expected
+@*
+The record loop has been given a ":" syntax to identify a loop through a named
+database but the database name has not been given or is not immediately
+adjacent to the colon character.
+
+grg: reg. exp. syntax error "%<FLD>=<RE>", '@emph{string}'
+@*
+The syntax of a filter condition used with the @sc{filter} predefined
+macro is wrong. The error message shows the correct syntax. See section
+@ref{FILTER} on the construction of filter conditions.
+
+grg: stack overflow
+@*
+The stack overflowed during equate processing as there were too many items on
+it (note that the stack size is reduced both by operations pushing values
+onto it and by local variables).
+
+grg: stack underflow
+@*
+A value was required from the stack by an operation during equate processing
+but the stack was empty.
+
+grg: stack value out of range
+@*
+Similar to a stack overflow except that the overflow occured during the
+creation of a local variable rather than an operation pusing a value onto the
+stack.
+
+grg: string argument expected, '@emph{string}'
+@*
+One of the @sc{include}, @sc{database}, or @sc{filter}  predefined macros
+expected a string argument. See @ref{Predefined Macros} on
+string arguments and @ref{INCLUDE},
+@ref{DATABASE}, and @ref{FILTER} on these
+three macros.
+
+grg: text body too big
+@*
+The text body maximum size has been exceeded by the definition given for one of
+the predefined macros (such as a header, footer, record, equate etc).
+
+grg: too many arguments for texpage01, '@emph{string}'
+@*
+This has a maximum of two numeric arguments.
+
+grg: too many arguments for texpagenn, '@emph{string}'
+@*
+This has a maximum of two numeric arguments.
+
+grg: too many arguments for texpattern, '@emph{string}'
+@*
+This has a maximum of 5 string arguments.
+
+grg: too many banner args, '@emph{string}'
+@*
+The maximum number of field arguments to the @sc{banner} predefined macro
+has been exceeded. See @ref{Hard Limits} on the hard limits of
+the preprocessor and @ref{BANNER} on this particular macro.
+
+grg: too many blocks, '@emph{string}'
+@*
+The maximum number of user defined text blocks has been exceeded. See
+@ref{Hard Limits} on the hard limits of the preprocessor and
+@ref{BLOCK} on this particular macro.
+
+grg: too many equate defs, '@emph{string}'
+@*
+The maximum number of equate definitions given by using the @sc{equate}
+predefined macro has been exceeded. See @ref{Hard Limits} on
+the hard limits of the preprocessor and @ref{EQUATE} on this
+particular macro.
+
+grg: too many equate vars
+@*
+The maximum number of local variables for an equate expression has been
+exceeded.
+
+grg: too many file args, '@emph{string}'
+@*
+The maximum number of file arguments given with the @sc{database} predefined
+macro has been exceeded. See @ref{Hard Limits} on the hard limits
+of the preprocessor and @ref{DATABASE} on this particular macro.
+
+grg: too many filter args, '@emph{string}'
+@*
+The maximum number of filters specified by using the @sc{filter} predefined
+macro has been exceeded. See @ref{Hard Limits} on the hard limits
+of the preprocessor and @ref{FILTER} on this particular macro.
+
+grg: too many group args, '@emph{string}'
+@*
+Not implemented.
+
+grg: too many local vars
+@*
+The maximum number of equate local variables has been exceeded. The maximum
+size is determined by the local variable table not the equate stack size.
+
+grg: too many macro defs, '@emph{string}'
+@*
+The maximum number of user macro definitions given by using the @sc{define}
+predefined macro has been exceeded. See @ref{Hard Limits} on
+the hard limits of the preprocessor and @ref{DEFINE} on this
+particular macro.
+
+grg: too many sort args, '@emph{string}'
+@*
+The maximum sort depth specified by using the @sc{sorton} predefined macro
+has been exceeded. See sections @ref{Hard Limits} on the hard limits of
+the preprocessor and @ref{SORTON} on this particular macro.
+
+grg: too many unique pattern characters
+@*
+The DFA limits a number of internal resources, this is one. Simplify the
+pattern definitions where possible.
+
+grg: too many unique pattern modes
+@*
+The DFA limits a number of internal resources, this is one. Simplify the
+pattern definitions where possible.
+
+grg: undefined equate variable, '@emph{string}'
+@*
+A system variable is being used before it has been declared (by writing a value
+to it).
+
+grg: undefined local variable, '@emph{string}'
+@*
+A local variable is being used before it has been declared (by writing a value
+to it).
+
+grg: undefined macro or equate, '@emph{string}'
+@*
+An undefined user macro or equate definition has been used in a text body or
+in an equate (not user macros). See @ref{Predefined Macros}
+on macro definitions and @ref{DEFINE} and
+@ref{EQUATE} on user macros and equate definitions respectively.
+
+grg: unknown banner field, '@emph{string}'
+@*
+An unknown database field name argument has been given to the @sc{banner}
+predefined macro. See @ref{Predefined Macros} on field
+arguments and @ref{BANNER} on this particular macro.
+
+grg: unknown character token, '@emph{token}'
+@*
+A pattern definition has been given a character set token which is not one of
+the predefined ones and has not been defined by the user.
+
+grg: unknown dfa mode
+@*
+A jump has been made to a DFA mode which has not been defined (this may be a
+result of not correctly setting the initial value with @strong{DFAMODE}).
+
+grg: unknown equate, '@emph{string}'
+@*
+An undefined equate definition has been used in a text body or
+in an equate. See @ref{Predefined Macros}
+on macro definitions and @ref{EQUATE} on equate definitions.
+
+grg: unknown field name, '@emph{string}'
+@*
+An unknown database field name has been used in a text body or
+in an equate. See @ref{Predefined Macros}
+on text bodies and @ref{EQUATE} on equate definitions.
+
+grg: unknown field type, '@emph{string}'
+@*
+A field type defined in a dBase3+ database file has not been recognised as
+The valid recognised types are C, N, D and L.
+
+grg: unknown mode
+@*
+This should never happen. If it does don't panic, just call for help.
+
+grg: unknown predefined GURGLE macro, '@emph{string}'
+@*
+A predefined macro name has not been recognised. All predefined macros start
+with the @sc{grg} or @sc{tex} sequence, followed by the rest of the
+name which must match one of the valid names. Same error as below.
+
+grg: unknown predefined tex macro, '@emph{string}'
+@*
+An invalid predefined macro has been used. Check for spelling mistakes. See
+@ref{Predefined Macros} for a list of predefined macros. Note
+that predefined macros are not case sensitive.
+
+grg: unknown sort field, '@emph{string}'
+@*
+An unknown database field name argument has been given to the @sc{sorton}
+predefined macro. See @ref{Predefined Macros} on field
+arguments and @ref{SORTON} on this particular macro.
+
+grg: unknown token
+@*
+An error in a pattern definition, the resulting token should be one of the
+valid start of record, end of record, start of field, end of field, error or
+discard token values.
+
+grg: unseparated condition
+@*
+A condition construct has been used in an equate expression which is missing
+the "else" clause (or the "endif" clause if no "else" clause is given). Note
+that reversed expressions always require an "else" clause (the colon character)
+whereas unreversed expressions do not.
+
+grg: unterminated condition
+@*
+A condition construct has been used in an equate expression which is missing
+the "endif" or ";" terminator. All conditions require this terminator.
+
+grg: unterminated string, '@emph{string}'
+@*
+A string has been given with a missing end quote.
+
+@node Examples, , , Top
+@section Examples
+
+@cindex Examples
+@cindex Equates, examples
+Included below is a complete example @sc{grg} file of a reasonable
+complexity. This demonstrates how moderately complex output can be
+generated without doing any very complex equate work
+(ie. just by using basic conditions on fields).
+
+@example
+%% DAI Grants Awarded Report Form Template
+%%DEFINE    TITLE Grants Awarded
+%%DATABASE  "../research.dbf"
+%%FILTER    "%GRANT_STAT=ACTIVE" "%GRANT_STAT=AWARDED"
+%%SORTON    %AI_AREA %PI_SNAME
+%%EQUATE    GRANT_HOLDER ?CO_INVEST"; %CO_INVEST"
+%%EQUATE    DURATION ?START_DATE"%START_DATE--"%END_DATE
+%%EQUATE    ACCOUNT_NO ?ACCOUNT_NO"RR%ACCOUNT_NO"
+%%EQUATE    RAS_PER_YR ?RAS_PER_YR
+%%EQUATE    STAFF_AD ?STAFF_AD"%STAFF_AD "?AD_PERCENT"%AD_PERCENT\%; "
+%%EQUATE    STAFF_TG ?STAFF_TG"%STAFF_TG "?TG_PERCENT"%TG_PERCENT\%; "
+%%EQUATE    STAFF_CN ?STAFF_CN"%STAFF_CN "?CN_PERCENT"%CN_PERCENT\%"
+%%EQUATE    STAFF_AR ?STAFF_AR"%STAFF_AR "?AR_PERCENT"%AR_PERCENT\%"
+%%EQUATE    STAFF1 ?STAFF_NM1
+%%EQUATE    STAFF2 ?STAFF_NM2"; %STAFF_NM2"
+%%EQUATE    STAFF3 ?STAFF_NM3"; %STAFF_NM3"
+%%EQUATE    STAFF4 ?STAFF_NM4"; %STAFF_NM4"
+%%EQUATE    STAFF5 ?STAFF_NM5"; %STAFF_NM5"
+%%HEADER
+  \documentstyle[grants]@{article@}
+  \pagestyle@{headings@}
+  \markright@{\noindent Department of Artificial Intelligence
+  \hfill %%TITLE as at \today@{@} \hfill@}
+  \sloppy
+  \begin@{document@}
+  \begin@{titlepage@}
+  \mbox@{@}
+  \end@{titlepage@}
+%%PAGE01 3
+  \vspace*@{1ex@}
+  \centerline@{@{\bf DEPARTMENT OF ARTIFICIAL INTELLIGENCE@}@}
+  \centerline@{@{\bf %%TITLE as at \today@}@}
+  \vspace*@{1ex@}
+%%PAGENN 4
+  \vspace*@{1ex@}
+%%BANNER    %AI_AREA
+  \vspace*@{1ex@}
+  \flushleft@{\underline@{\bf %AI_AREA@}@}
+%%RECORD
+  \begin@{list@}@{@}@{\leftmargin 2.15in
+  \renewcommand@{\makelabel@}[1]@{\hfil \#1@}\labelwidth 2.1in
+  \itemsep 0ex \parsep 0ex@}
+  \item[@{\bf Title:@}] %GRANT_TITL
+  \item[@{\bf Grantholder:@}] %PI_SNAME, %PI_INITS%%GRANT_HOLDER
+  \item[@{\bf Grant No:@}] %GRANT_NO
+  \item[@{\bf A/C No:@}] %%ACCOUNT_NO
+  \item[@{\bf Duration:@}] %%DURATION
+  \item[@{\bf Value:@}] \pounds%TOTAL\\@{\bf Staff@} \pounds%STAFF_COST;
+  @{\bf Travel@} \pounds%TRAVEL; @{\bf Consumables@} \pounds%CONSUMABLE;
+  \\@{\bf Equipment@} \pounds%EQUIPMENT; @{\bf Indirect@} \pounds%INDIRECT
+  \item[@{\bf RA Man Yrs/Ac Yr:@}] %%RAS_PER_YR
+  \item[@{\bf Research Posts:@}] %%STAFF_AR
+  \item[@{\bf Other Posts:@}] %%STAFF_AD%%STAFF_TG%%STAFF_CN
+  \item[@{\bf Staff:@}] %%STAFF1%%STAFF2%%STAFF3%%STAFF4%%STAFF5
+  \item[@{\bf Source Of Funding:@}] %FUNDING
+  \end@{list@}
+%%FOOTER
+  \end@{document@}
+@end example
+
+The example below is one of the simplest files that could be created. This
+makes an SQL query to a RDBMS and just dumps the output in delimited form using
+the default header and record text bodies.
+
+@example
+%%DATABASE "cat.sql"
+%%DEFINE PHYSDB animals
+%%DEFINE NAMCOL
+%%DEFINE DELIM |
+@end example
+
+The example below shows a more complex SQL query which is then used to
+construct HTML for a web page in a fairly simple way. The file includes some
+other files for default setup which are not shown below.
+
+@example
+#!/usr/bin/gurgle
+%%INCLUDE   "../PTC/html.pt"
+%%INCLUDE   "../PTC/basic.grg"
+%%INCLUDE   "banner.html"
+%%EQUATE    eq_init "../testing/absences.html" >>_eq_outfile
+%%DEFINE    PHYSDB daidb
+%%DEFINE    NAMCOL
+
+%%DATABASE	"absence.sql"
+  select
+    lastname, firstname, reason, reason_oth, start_date as sdate,
+    return_date as rdate,
+    date_part('year',start_date) as year,
+    date_trunc('month',start_date) as month,
+    return_date - start_date as days
+  from
+    absence, person
+  where
+    person.person# = absence.person# and
+    ( ( start_date >= date('today') and
+        start_date < date('today') + '28 days' ) or
+      ( start_date < date('today') and
+        return_date >= date('today') ) )
+  order by
+    lastname
+
+%%HEADER
+  #BEGIN_INSERT
+  <TABLE BORDER=0>
+  <TR ALIGN=LEFT>
+    <TH COLSPAN=2>Name
+    <TH COLSPAN=2>Date(s)
+    <TH COLSPAN=2>Reason
+
+%%RECORD
+  <TR>
+    <TD><B>%FIRSTNAME %LASTNAME</B><TD>
+    <TD>%SDATE #EVAL(%RDATE<>""?" to "+%RDATE:;) (%DAYS)<TD>
+    <TD>#EVAL(%REASON="Other"?%REASON_OTH:%REASON;)
+
+%%FOOTER
+  </TABLE>
+  #END_INSERT
+
+%%END
+@end example
+
+The example below just contains some useful equate definitions for commonly
+required functions (particularly string handling).
+
+@example
+%%EQUATE traceon
+  /* turn on equate tracing */
+  1 >> _eq_trace
+%%EQUATE traceoff
+  /* turn off equate tracing */
+  0 >> _eq_trace
+%%EQUATE datey
+  /* returns string with century and year part of date */
+  inputs(s)
+  outputs(substr(s,0,3))
+%%EQUATE datem
+  /* returns string with month part of date */
+  inputs(s)
+  outputs(substr(s,4,5))
+%%EQUATE dated
+  /* returns string with day part of date */
+  inputs(s)
+  outputs(substr(s,6,7))
+%%EQUATE bdate
+  /* returns string with date formatted to "dd/mm/ccyy" */
+  inputs(s)
+  outputs(dated(s)+"/"+datem(s)+"/"+datey(s))
+%%EQUATE ltou
+  /* converts lower case string s to upper case */
+  inputs(s)
+  if not (s = "") then
+    0 >> i
+    while s'i <> 0 do
+      if s'i >= 97 and s'i <= 122 then
+        s,(s'i - 32)`i >> s
+      endif
+      ++i >> i
+    endwhile
+  endif
+  outputs(s)
+%%EQUATE substr
+  /* returns substring of s1 starting at s and ending at e */
+  inputs(s1,s,e)
+  "" >> s2
+  0 >> x
+  while (s <= e) do
+    s2,(s1's)`x >> s2
+    ++s >> s
+    ++x >> x
+  endwhile
+  outputs(s2,0`x)
+%%EQUATE strlen
+  /* returns length of string s */
+  inputs(s)
+  0 >> x while s'x <> 0 do ++x >> x endwhile
+  outputs(x)
+%%EQUATE nrecs
+  /* returns size (n records) of given database db */
+  /* note that for a quoted string keywords are not expanded within so
+  the raw reversed operators must be used instead */
+  inputs(db)
+  0 >> n
+  if db = "" then "" >> s else ":" + db >> s endif
+  "(n + 1 >> n)" + s >> s
+  exec(s)
+  outputs(n)
+@end example
+
+@node GNU Free Documentation License, , , Top
+@appendix GNU Free Documentation License
+
+@include fdl.texi
+
+@node Function Index, , , Top
+@unnumbered Command Index
+
+@printindex fn
+
+@node Variable Index, , , Top
+@unnumbered Variable Index
+
+@printindex vr
+
+@node Concept Index, , , Top
+@unnumbered Concept Index
+
+@printindex cp
+
+@bye

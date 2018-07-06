@@ -1,0 +1,15 @@
+Lots :-(
+
+Unary minus operator and parsing is broken, eg. "5-1" will fail, add spaces
+to workaround, eg. "5 - 1". Also use "0 - 1" for a negative literal number.
+
+Order of banner macros in definition file must match order of declared sort
+fields for correct behaviour.
+
+Cannot use a "roll .. through" construct
+within a conditional construct when the colon suffix form is used.
+
+A field reference immediately after a ? will be mis-interpreted and will
+cause and, to workaround simply put in a separator. For example,
+"1=1?%FLD1:;" will break, either "1=2?\%FLD1:;" or "1=2? %FLD1:;" would
+be okay though.

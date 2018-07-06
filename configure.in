@@ -1,0 +1,169 @@
+dnl Process this file with autoconf to produce a configure script.
+
+AC_DEFINE([PACKAGE],0,[Define the package.])
+AC_DEFINE([VERSION],0,[Define the package version.])
+
+AC_DEFINE([REGEX],0,[Define if regex is needed.])
+
+AC_DEFINE([SQL],0,[Define if a RDBMS driver is needed.])
+AC_DEFINE([GNUSQL],0,[Define if a GNUSQL driver is needed.])
+AC_DEFINE([POSTGRES],0,[Define if a POSTGRESQL driver is needed.])
+AC_DEFINE([ADD_MYSQL],0,[Define if a MYSQL driver is needed.])
+AC_DEFINE([INGRES],0,[Define if a CA-INGRES driver is needed.])
+
+AC_DEFINE([GUILE],0,[Define if GUILE support is needed.])
+
+AC_INIT(src/main.c)
+AM_INIT_AUTOMAKE(gurgle,1.61)
+AM_CONFIG_HEADER(src/config.h:config.h.in)
+
+dnl Program checks
+
+AC_PROG_CC
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_RANLIB
+AC_PROG_MAKE_SET
+
+dnl Two lines below work on Sun, replace with third line for Linux
+dnl AC_PROG_LEX
+dnl AC_DECL_YYTEXT
+AM_PROG_LEX
+
+dnl Architecture checks
+
+AC_C_BIGENDIAN
+
+dnl Header file checks
+
+AC_SUBST(REGEX)
+AC_CHECK_HEADERS(regex.h,AC_DEFINE(REGEX))
+
+dnl Feature checks
+
+AC_SUBST(SQL)
+AC_SUBST(GNUSQL)
+AC_SUBST(POSTGRES)
+AC_SUBST(ADD_MYSQL)
+AC_SUBST(INGRES)
+AC_SUBST(GUILE)
+
+AC_SUBST(GSQL)
+AC_SUBST(GSQLDEFS)
+AC_SUBST(ESQL)
+AC_SUBST(ESQLDEFS)
+
+dnl Setup RDBMS support
+
+GSQL=cp
+GSQLDEFS='$*.c'
+ESQL=cp
+ESQLDEFS='$*.c'
+
+AC_MSG_CHECKING(what RDBMS support is wanted)
+rdbms=none
+if test $rdbms = none; then
+AC_ARG_ENABLE(gnusql,
+[  --enable-gnusql         turn on GNUSQL RDBMS support],
+[if test "$enableval" = yes; then
+  rdbms=gnusql
+  AC_MSG_RESULT($rdbms)
+  AC_DEFINE(SQL)
+  AC_DEFINE(GNUSQL)
+  AC_CHECK_LIB(gss, main)
+  AC_CHECK_HEADERS(gnusql/dyn_funcs.h)
+  AC_CHECK_PROG(GSQL,gsqlc,gsqlc)
+  GSQLDEFS=''
+fi])
+fi
+AM_CONDITIONAL(GNUSQL, test X$rdbms = Xgnusql)
+
+if test $rdbms = none; then
+AC_ARG_ENABLE(postgres,
+[  --enable-postgres       turn on PostgreSQL RDBMS support],
+[if test "$enableval" = yes; then
+  rdbms=postgres
+  AC_MSG_RESULT($rdbms)
+  AC_DEFINE(SQL)
+  AC_DEFINE(POSTGRES)
+  AC_CHECK_LIB(pq, PQdb)
+  AC_CHECK_HEADERS(libpq-fe.h)
+fi])
+fi
+AM_CONDITIONAL(POSTGRES, test X$rdbms = Xpostgres)
+
+if test $rdbms = none; then
+AC_ARG_ENABLE(mysql,
+[  --enable-mysql          turn on MySQL RDBMS support],
+[if test "$enableval" = yes; then
+  rdbms=mysql
+  AC_MSG_RESULT($rdbms)
+  AC_DEFINE(SQL)
+  AC_DEFINE(ADD_MYSQL)
+  AC_CHECK_LIB(mysqlclient, mysql_real_connect)
+  AC_CHECK_HEADERS(mysql/mysql.h)
+fi])
+fi
+AM_CONDITIONAL(ADD_MYSQL, test X$rdbms = Xmysql)
+
+if test $rdbms = none; then
+AC_ARG_ENABLE(ingres,
+[  --enable-ingres          turn on Ingres RDBMS support],
+[if test "$enableval" = yes; then
+  rdbms=ingres
+  AC_MSG_RESULT($rdbms)
+  AC_DEFINE(SQL)
+  AC_DEFINE(INGRES)
+  AC_CHECK_LIB(ingres, main)
+  AC_PATH_PROG(ESQL,esqlc,,$PATH:II_SYSTEM/ingres/bin)
+  AC_CHECK_PROG(ESQL,esqlc,esqlc)
+  ESQLDEFS=''
+fi])
+fi
+AM_CONDITIONAL(INGRES, test X$rdbms = Xingres)      
+
+if test $rdbms = none; then
+  AC_MSG_RESULT($rdbms)
+fi
+
+dnl Setup GUILE support
+
+AC_MSG_CHECKING(if GUILE support is wanted)
+AC_ARG_ENABLE(guile,
+[  --enable-guile          turn on GUILE support],
+[if test "$enableval" = yes; then
+  guile=true
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(GUILE)
+  AC_CHECK_LIB(guile, main)
+  AC_CHECK_HEADERS(libguile.h guile/gh.h)
+else
+  AC_MSG_RESULT(no)
+fi], [AC_MSG_RESULT(no)])
+AM_CONDITIONAL(GUILE, test X$guile = Xtrue)
+
+AC_CHECK_LIB(m, main)
+AC_CHECK_LIB(dl, main)
+AC_CHECK_LIB(nsl, main)
+AC_CHECK_LIB(socket, main)
+
+dnl Needed for OpenIngres
+AC_CHECK_LIB(elf, main)
+AC_CHECK_LIB(rt, main)
+AC_CHECK_LIB(crypt, main)
+
+dnl Checks for header files.
+AC_HEADER_STDC
+AC_CHECK_HEADERS(limits.h sys/time.h sys/types.h)
+AC_CHECK_HEADERS(stdio.h varargs.h string.h stdlib.h)
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_TYPE_SIZE_T
+AC_STRUCT_TM
+
+dnl Checks for library functions.
+AC_FUNC_STRFTIME
+AC_FUNC_VPRINTF
+
+AC_OUTPUT(Makefile src/Makefile src/dbase/Makefile doc/Makefile)
